@@ -1,0 +1,123 @@
+"""Configuração do monitor. Nenhum número ou texto de regra de negócio fica fora deste arquivo."""
+from pathlib import Path
+
+RAIZ = Path(__file__).parent
+BANCO = RAIZ / "data" / "monitor.db"
+SAIDA = RAIZ / "saida"
+DASHBOARD = RAIZ / "dashboard"   # o dados.js também é copiado para cá, ao lado do dashboard.html
+
+# Escopo
+UF = "SC"
+CODIGO_UF_IBGE = 42
+
+# APIs públicas
+PNCP_CONSULTA = "https://pncp.gov.br/api/consulta"
+IBGE_API = "https://servicodados.ibge.gov.br/api"
+
+# Coleta no PNCP
+# Códigos de modalidade da API de consulta do PNCP (conferir na documentação):
+# 4 Concorrência eletrônica, 5 Concorrência presencial, 6 Pregão eletrônico, 7 Pregão presencial,
+# 8 Dispensa, 9 Inexigibilidade, 12 Credenciamento.
+MODALIDADES = [4, 5, 6, 7, 8, 9]
+NOMES_MODALIDADES = {4: "concorrência eletrônica", 5: "concorrência presencial", 6: "pregão eletrônico",
+                     7: "pregão presencial", 8: "dispensa", 9: "inexigibilidade", 12: "credenciamento"}
+JANELA_DIAS = 10              # a API limita o intervalo de datas por consulta; a coleta divide o período
+TAMANHO_PAGINA_CONTRATACOES = 50
+TAMANHO_PAGINA_CONTRATOS = 500
+PAUSA_ENTRE_CHAMADAS_S = 0.4   # respeitar o servidor público
+TENTATIVAS = 6                 # novas tentativas em erro de rede ou 429/5xx
+ESPERA_MAXIMA_S = 60           # espera entre tentativas: 2, 4, 8, 16, 32, 60 s
+TIMEOUT_S = 60
+TENTATIVAS_ERRO_400 = 3        # o PNCP às vezes devolve 400 por instabilidade, com o pedido correto: repetir
+CONSULTAS_PARALELAS = 4        # órgãos consultados ao mesmo tempo na etapa de contratos (1 = um por vez)
+ESPERA_ANTES_DE_REPETIR_S = 30 # pausa antes de repassar, no fim da etapa, os órgãos que falharam
+
+# Coleta incremental (sem --dias)
+# Órgão sem contratação nova no período só tem os contratos reconsultados depois de N dias (0 = todos sempre).
+# Nenhum contrato se perde: cada órgão guarda até que data já foi consultado e retoma dali.
+REVISAR_TODOS_OS_ORGAOS_DIAS = 7
+# As licitações novas já chegam pelas publicadas; as antigas ainda abertas já estão no banco.
+PROPOSTAS_EM_ABERTO_UMA_VEZ_POR_DIA = True
+
+# Log
+LOG_POR_PAGINA = True          # registra cada página lida; False deixa o log mais curto
+ARQUIVO_LOG = RAIZ / "data" / "coleta.log"   # cópia do log de cada execução (é sobrescrito)
+
+# Lista de órgãos. Os contratos são buscados por órgão, e a lista nasce das licitações publicadas. Mas
+# câmaras, fundos e fundações costumam assinar contratos de licitações "multientidade" feitas pela
+# prefeitura, sem publicar licitação própria: sem uma carga ampla, ficam fora (conferido: só 55% dos
+# órgãos com contrato da IPM em SC estavam na lista). `python main.py orgaos` faz essa carga.
+CARGA_ORGAOS_DIAS = 365
+
+# Situações em que a licitação deixa de ser oportunidade (comparação sem acento, parte do nome basta)
+SITUACOES_FORA = ["revogada", "anulada", "suspensa", "deserta", "fracassada"]
+
+# Esferas de governo mantidas (campo orgaoEntidade.esferaId do PNCP): M municipal, E estadual, F federal
+ESFERAS = {"M"}
+# Consórcios intermunicipais vêm com esfera "N" (não se aplica) no PNCP, mas compram para os municípios
+# (ex.: CINCATARINA). Com True, entram os órgãos de esfera N cujo nome contenha "consórcio".
+INCLUIR_CONSORCIOS = True
+
+# Contratos: buscar por órgão (CNPJ dos órgãos municipais de SC já vistos nas contratações) em vez de
+# percorrer os contratos do país inteiro. Muito mais rápido e menos sujeito a falhas do servidor.
+CONTRATOS_POR_ORGAO = True
+
+# Filtro de TI: o objeto precisa conter pelo menos um termo (comparação sem acento e sem maiúsculas)
+TERMOS_TI = [
+    "sistema de gestao", "sistemas de gestao", "software", "licenca de uso", "licenciamento de uso",
+    "sistema integrado", "sistemas integrados", "solucao tecnologica", "plataforma digital",
+    "sistema informatizado", "sistemas informatizados", "computacao em nuvem", "erp",
+    "sistema de arrecadacao", "sistema de tributacao", "sistema de folha", "sistema de contabilidade",
+    "sistema de protocolo", "prontuario eletronico", "nota fiscal eletronica", "nota fiscal de servicos eletronica",
+    # acrescentados após conferir 207 contratos da IPM exportados do portal do PNCP (58 escapavam do filtro)
+    "sistema web", "sistemas web", "integrado de gestao", "integrada de gestao", "integrado para gestao",
+    "solucao informatizada", "solucoes informatizadas", "plataforma web", "tecnologia da informacao",
+    "tecnologia de informacao", "siafic", "sistemas estruturantes", "atende.net", "data center", "datacenter",
+    "cessao de direito de uso", "direito de uso de sistema", "locacao de sistema", "sistema de informacoes",
+    "sistema unico e integrado", "portal da transparencia", "portal institucional",
+    # acrescentados após conferir 88 contratos da Betha em SC
+    "sistema de informatica", "sistemas de informatica", "sistema gestao publica",
+]
+# Categoria do processo no PNCP que já indica TI (aceita mesmo sem termo de TI no objeto)
+CATEGORIAS_PROCESSO_TI = ["informatica"]
+# Termos que derrubam o registro mesmo com termo de TI (falsos positivos comuns)
+# Frases específicas: "mobiliario" sozinho derrubava "cadastro mobiliário" (cadastro de ISS, comum em ERP)
+TERMOS_EXCLUIR = ["impressora", "toner", "material de expediente", "aquisicao de mobiliario", "moveis",
+                  "aquisicao de veiculo", "locacao de veiculo"]
+
+# Categorias por palavras-chave, na ordem de prioridade (a primeira que casar vence)
+CATEGORIAS = {
+    "Saúde": ["saude", "prontuario", "ubs", "farmacia", "regulacao"],
+    "Educação": ["educacao", "escolar", "escola", "aluno", "merenda"],
+    "Tributos": ["tribut", "arrecadacao", "iptu", "iss", "nota fiscal", "nfs-e", "divida ativa"],
+    "Folha de pagamento": ["folha de pagamento", "recursos humanos", "rh "],
+    "Contabilidade e finanças": ["contabil", "orcament", "tesouraria", "financeir", "compras", "licitac"],
+    "Gestão integrada": ["gestao publica", "sistema integrado", "sistemas integrados", "erp", "gestao municipal"],
+}
+CATEGORIA_PADRAO = "Outros sistemas"
+
+# Fornecedores a acompanhar (CNPJ só com números). Preencher com os fornecedores do setor que interessam.
+FORNECEDORES_ACOMPANHADOS: dict[str, str] = {
+    # "00000000000000": "Nome do fornecedor",
+}
+
+# Pontuação de prioridade (0 a 10) das oportunidades
+PESOS = {
+    "porte": 3.0,          # população do município (escala log)
+    "valor": 3.0,          # valor estimado (escala log)
+    "prazo": 2.0,          # disputa próxima ganha mais pontos
+    "categoria": 2.0,      # categorias estratégicas
+}
+CATEGORIAS_ESTRATEGICAS = {"Gestão integrada", "Saúde", "Tributos"}
+
+# Movimentações exibidas
+DIAS_MOVIMENTACOES = 15
+
+# Busca de um fornecedor no mapa (fornecedor_no_mapa.py)
+# Raízes de CNPJ (8 dígitos, cobrem as filiais). IPM Sistemas Ltda: 01.258.027/0001-41.
+# Para o grupo econômico, acrescentar "44104389" (IPM Fintech, pagamentos de tributos).
+FORNECEDOR_CNPJ_RAIZES = ["01258027"]
+FORNECEDOR_NOME = "IPM Sistemas"
+FORNECEDOR_DESDE = "2023-01-01"     # início do histórico consultado
+JANELA_HISTORICO_DIAS = 365         # período por consulta; se a API recusar, o script divide sozinho
+BANCO_HISTORICO = RAIZ / "data" / "historico_contratos.db"

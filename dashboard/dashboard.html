@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor de Licitações SC</title>
+<style>
+:root{
+  color-scheme:light;
+  --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--ink3:#7a7974;
+  --grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--wash:rgba(11,11,11,.04);
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;
+  --q0:#e8e7e1;--q1:#9ec5f4;--q2:#5598e7;--q3:#256abf;--q4:#104281;
+  --warn-bg:#fff4d6;--warn-ink:#6b4a00;--crit:#b3261e;
+}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){
+  color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--ink3:#8f8e87;
+  --grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--wash:rgba(255,255,255,.05);
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;
+  --q0:#2c2c2a;--q1:#184f95;--q2:#256abf;--q3:#3987e5;--q4:#86b6ef;
+  --warn-bg:#3a2e10;--warn-ink:#f3d58a;--crit:#ff8a80;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--ink3:#8f8e87;
+  --grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--wash:rgba(255,255,255,.05);
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;
+  --q0:#2c2c2a;--q1:#184f95;--q2:#256abf;--q3:#3987e5;--q4:#86b6ef;
+  --warn-bg:#3a2e10;--warn-ink:#f3d58a;--crit:#ff8a80;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 24px 0;max-width:1280px;margin:0 auto}
+h1{font-size:20px;margin:0 0 2px}
+.sub{color:var(--ink2);font-size:13px}
+.demo{margin:12px 0 0;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:13px}
+nav{display:flex;gap:4px;margin-top:16px;border-bottom:1px solid var(--grid);overflow-x:auto}
+nav button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font:inherit;color:var(--ink2);cursor:pointer;white-space:nowrap}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+main{max-width:1280px;margin:0 auto;padding:16px 24px 40px}
+section[hidden]{display:none}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center}
+.filters label{font-size:12px;color:var(--ink2);display:flex;flex-direction:column;gap:2px}
+select,input[type=search]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:160px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.kpi .l{font-size:12px;color:var(--ink2)}
+.kpi .v{font-size:24px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.card h2{font-size:14px;margin:0 0 2px}
+.card .note{font-size:12px;color:var(--ink2);margin:0 0 10px}
+.grid2{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--axis);padding:6px 8px;white-space:nowrap}
+td{border-bottom:1px solid var(--grid);padding:6px 8px;vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:hover td{background:var(--wash)}
+a{color:var(--s1)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block;flex:none}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--ink2);margin-bottom:8px}
+svg text{fill:var(--ink2);font-size:11px}
+.tip{position:fixed;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:10;max-width:280px;display:none}
+.tip b{display:block;margin-bottom:2px}
+.muted{color:var(--ink3)}
+.urg{color:var(--crit);font-weight:600}
+#mapa path{stroke:var(--surface);stroke-width:.6;cursor:pointer}
+#mapa path:hover,#mapa path.sel{stroke:var(--ink);stroke-width:1.4}
+.empty{color:var(--ink2);padding:16px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Monitor de Licitações SC</h1>
+  <div class="sub" id="sub"></div>
+  <div class="demo" id="demo" hidden>Dados de demonstração, fictícios: municípios reais, mas fornecedores, contratos, valores e licitações inventados. Rode python main.py tudo para usar dados reais.</div>
+  <nav role="tablist">
+    <button role="tab" aria-selected="true" data-tab="t1">Mapeamento das oportunidades</button>
+    <button role="tab" aria-selected="false" data-tab="t2">Movimentações (15 dias)</button>
+    <button role="tab" aria-selected="false" data-tab="t3">Mapa das prefeituras</button>
+  </nav>
+</header>
+<main>
+  <!-- ABA 1 -->
+  <section id="t1" role="tabpanel">
+    <div class="filters">
+      <label>Situação<select id="f1sit"><option value="abertas">Abertas</option><option value="todas">Todas</option></select></label>
+      <label>Categoria<select id="f1cat"><option value="">Todas</option></select></label>
+      <label>Buscar<input type="search" id="f1q" placeholder="Município ou objeto"></label>
+    </div>
+    <div class="kpis" id="k1"></div>
+    <div class="grid2">
+      <div class="card"><h2>Oportunidades priorizadas</h2><p class="note">Ordenadas pela nota de prioridade calculada pelo monitor.</p><div class="tablewrap" id="tab1"></div></div>
+      <div class="card"><h2>Valor estimado por categoria</h2><p class="note">Soma do valor estimado das oportunidades filtradas.</p><div id="ch1"></div></div>
+    </div>
+  </section>
+
+  <!-- ABA 2 -->
+  <section id="t2" role="tabpanel" hidden>
+    <div class="filters">
+      <label>Tipo<select id="f2tipo"><option value="">Todos</option></select></label>
+      <label>Buscar<input type="search" id="f2q" placeholder="Município, fornecedor ou descrição"></label>
+    </div>
+    <div class="kpis" id="k2"></div>
+    <div class="card"><h2>Movimentações por dia</h2><p class="note" id="n2"></p><div class="legend" id="lg2"></div><div id="ch2"></div></div>
+    <div class="card"><h2>Lista de movimentações</h2><div class="tablewrap" id="tab2"></div></div>
+  </section>
+
+  <!-- ABA 3 -->
+  <section id="t3" role="tabpanel" hidden>
+    <div class="filters">
+      <label>Categoria<select id="f3cat"><option value="">Todas</option></select></label>
+      <label>Fornecedor<select id="f3forn"><option value="">Todos</option></select></label>
+    </div>
+    <div class="kpis" id="k3"></div>
+    <div class="grid2">
+      <div class="card"><h2>Contratos de TI vigentes por prefeitura</h2><p class="note">Clique num município para ver os contratos. A vigência é a do registro do contrato no PNCP: prorrogações por termo aditivo podem não estar refletidas.</p><div class="legend" id="lg3"></div><div id="mapa"><div class="empty">Carregando o mapa do IBGE…</div></div></div>
+      <div class="card"><h2 id="p3t">Selecione um município</h2><p class="note" id="p3n">Ou veja abaixo os fornecedores com mais prefeituras.</p><div class="tablewrap" id="p3"></div></div>
+    </div>
+    <div class="card"><h2>Fornecedores por número de prefeituras com contrato vigente</h2><p class="note">Respeita os filtros acima.</p><div id="ch3"></div></div>
+  </section>
+</main>
+<div class="tip" id="tip"></div>
+
+<script src="dados.js"></script>
+<script>
+"use strict";
+const D = window.DADOS;
+const $ = s => document.querySelector(s);
+const tip = $("#tip");
+if (!D) {
+  document.querySelector("main").innerHTML = '<div class="card"><h2>dados.js não encontrado</h2><p class="note">Os dados ainda não foram exportados. Na pasta do projeto, rode <code>python main.py tudo --dias 7</code> (ou <code>python main.py exportar</code>, se a coleta já terminou) e recarregue esta página.</p></div>';
+  throw new Error("dados.js ausente");
+}
+
+/* ---------- utilidades ---------- */
+const REF = new Date(D.gerado_em + "T00:00:00");
+const DIA = 864e5;
+const toDate = s => s ? new Date(s + "T00:00:00") : null;
+const dias = s => s ? Math.round((toDate(s) - REF) / DIA) : null;
+const fData = s => s ? s.split("-").reverse().join("/") : "—";
+const fNum = n => (n ?? 0).toLocaleString("pt-BR");
+function fBRL(v){
+  if (v == null || isNaN(v)) return "—";
+  if (Math.abs(v) >= 1e6) return "R$ " + (v/1e6).toLocaleString("pt-BR",{maximumFractionDigits:1}) + " mi";
+  if (Math.abs(v) >= 1e3) return "R$ " + (v/1e3).toLocaleString("pt-BR",{maximumFractionDigits:0}) + " mil";
+  return "R$ " + v.toLocaleString("pt-BR");
+}
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const norm = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+const link = u => u && u !== "#" ? `<a href="${esc(u)}" target="_blank" rel="noopener">abrir</a>` : '<span class="muted">—</span>';
+function kpis(el, items){ el.innerHTML = items.map(([l,v]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join(""); }
+function showTip(e, html){ tip.innerHTML = html; tip.style.display = "block";
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + 14, y = e.clientY + 14;
+  if (x + w > innerWidth - 8) x = e.clientX - w - 14;
+  if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px"; }
+const hideTip = () => tip.style.display = "none";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function fillSelect(sel, values){ [...new Set(values)].filter(Boolean).sort((a,b)=>a.localeCompare(b,"pt-BR")).forEach(v => sel.insertAdjacentHTML("beforeend", `<option>${esc(v)}</option>`)); }
+
+/* barra horizontal de uma série (hover em cada barra) */
+function hbars(el, rows, fmt){
+  if (!rows.length){ el.innerHTML = '<div class="empty">Nenhum dado para os filtros.</div>'; return; }
+  const W = el.clientWidth || 400, labelW = Math.min(170, W*0.42), rowH = 28, barH = 16, H = rows.length*rowH + 4;
+  const max = Math.max(...rows.map(r => r.v)) || 1, x = v => (W - labelW - 110) * v / max;
+  let s = `<svg width="${W}" height="${H}" role="img">`;
+  rows.forEach((r,i) => { const y = i*rowH + 4, w = Math.max(2, x(r.v));
+    s += `<text x="${labelW-8}" y="${y+barH/2+4}" text-anchor="end">${esc(r.k)}</text>`;
+    s += `<path d="M${labelW},${y} h${w-4} a4,4 0 0 1 4,4 v${barH-8} a4,4 0 0 1 -4,4 h${-(w-4)} z" fill="${css("--s1")}" data-i="${i}"/>`;
+    s += `<text x="${labelW+w+6}" y="${y+barH/2+4}" style="fill:var(--ink)">${esc(fmt(r.v))}</text>`;
+    s += `<rect x="0" y="${y-5}" width="${W}" height="${rowH}" fill="transparent" data-i="${i}"/>`; });
+  el.innerHTML = s + "</svg>";
+  el.querySelectorAll("[data-i]").forEach(n => { const r = rows[+n.dataset.i];
+    n.addEventListener("mousemove", e => showTip(e, `<b>${esc(r.k)}</b>${esc(fmt(r.v))}${r.extra ? "<br>"+r.extra : ""}`));
+    n.addEventListener("mouseleave", hideTip); });
+}
+
+/* ---------- cabeçalho e abas ---------- */
+$("#sub").textContent = `Santa Catarina · dados de referência em ${fData(D.gerado_em)} · fontes: PNCP e IBGE`;
+if (D.demo) $("#demo").hidden = false;
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll("main > section").forEach(s => s.hidden = s.id !== b.dataset.tab);
+  render(); }));
+
+/* ---------- ABA 1: oportunidades ---------- */
+fillSelect($("#f1cat"), D.oportunidades.map(o => o.categoria));
+function render1(){
+  const sit = $("#f1sit").value, cat = $("#f1cat").value, q = norm($("#f1q").value);
+  const rows = D.oportunidades.filter(o =>
+    (sit === "todas" || dias(o.data_abertura) >= 0) && (!cat || o.categoria === cat) &&
+    (!q || norm(o.municipio + " " + o.objeto).includes(q))).sort((a,b) => (b.nota ?? 0) - (a.nota ?? 0));
+  const abertas = rows.filter(o => dias(o.data_abertura) >= 0);
+  kpis($("#k1"), [
+    ["Oportunidades", fNum(rows.length)],
+    ["Valor estimado", fBRL(rows.reduce((s,o) => s + (o.valor_estimado || 0), 0))],
+    ["Disputas nos próximos 7 dias", fNum(abertas.filter(o => dias(o.data_abertura) <= 7).length)],
+    ["Municípios", fNum(new Set(rows.map(o => o.codigo_ibge)).size)] ]);
+  $("#tab1").innerHTML = rows.length ? `<table><thead><tr><th class="n">Nota</th><th>Município</th><th>Objeto</th><th>Categoria</th><th class="n">Valor estimado</th><th>Abertura</th><th>Edital</th></tr></thead><tbody>${
+    rows.map(o => { const d = dias(o.data_abertura);
+      const prazo = d == null ? "" : d < 0 ? '<span class="muted">encerrada</span>' : d <= 7 ? `<span class="urg">em ${d} dia${d===1?"":"s"}</span>` : `em ${d} dias`;
+      return `<tr><td class="n"><b>${o.nota?.toLocaleString("pt-BR") ?? "—"}</b></td><td>${esc(o.municipio)}</td><td>${esc(o.objeto)}<div class="muted">${esc(o.orgao)} · ${esc(o.modalidade)}${o.plataforma ? " · publicado via " + esc(o.plataforma) : ""}</div></td><td>${esc(o.categoria)}</td><td class="n">${fBRL(o.valor_estimado)}</td><td>${fData(o.data_abertura)}<div>${prazo}</div></td><td>${link(o.link)}</td></tr>`; }).join("")
+  }</tbody></table>` : '<div class="empty">Nenhuma oportunidade para os filtros.</div>';
+  const porCat = {}; rows.forEach(o => { porCat[o.categoria] ??= {v:0,n:0}; porCat[o.categoria].v += o.valor_estimado || 0; porCat[o.categoria].n++; });
+  hbars($("#ch1"), Object.entries(porCat).map(([k,x]) => ({k, v:x.v, extra:`${x.n} oportunidade${x.n>1?"s":""}`})).sort((a,b) => b.v - a.v), fBRL);
+}
+["#f1sit","#f1cat","#f1q"].forEach(s => $(s).addEventListener("input", render1));
+
+/* ---------- ABA 2: movimentações ---------- */
+const TIPOS = ["Licitação publicada","Contrato assinado","Resultado homologado","Aditivo de contrato"];
+const extraTipos = [...new Set(D.movimentacoes.map(m => m.tipo))].filter(t => !TIPOS.includes(t));
+const TIPOS_ALL = TIPOS.concat(extraTipos.length ? ["Outros"] : []);
+const tipoDe = t => TIPOS.includes(t) ? t : "Outros";
+const COR = {"Licitação publicada":"--s1","Contrato assinado":"--s2","Resultado homologado":"--s3","Aditivo de contrato":"--s4","Outros":"--ink3"};
+fillSelect($("#f2tipo"), D.movimentacoes.map(m => m.tipo));
+function render2(){
+  const tipo = $("#f2tipo").value, q = norm($("#f2q").value);
+  const ini = new Date(REF - 14*DIA);
+  const rows = D.movimentacoes.filter(m => { const d = toDate(m.data); return d >= ini && d <= REF &&
+    (!tipo || m.tipo === tipo) && (!q || norm(m.municipio+" "+m.fornecedor+" "+m.descricao).includes(q)); })
+    .sort((a,b) => b.data.localeCompare(a.data));
+  $("#n2").textContent = `De ${ini.toLocaleDateString("pt-BR")} a ${REF.toLocaleDateString("pt-BR")}.`;
+  const cont = t => rows.filter(m => tipoDe(m.tipo) === t).length;
+  kpis($("#k2"), [["Movimentações", fNum(rows.length)]].concat(TIPOS.map(t => [t, fNum(cont(t))])));
+  const ativos = TIPOS_ALL.filter(t => rows.some(m => tipoDe(m.tipo) === t));
+  $("#lg2").innerHTML = ativos.map(t => `<span class="pill"><span class="sw" style="background:var(${COR[t]})"></span>${t}</span>`).join("");
+  // barras empilhadas por dia
+  const el = $("#ch2"), W = el.clientWidth || 600, H = 220, pl = 28, pb = 26, pt = 8;
+  const days = [...Array(15)].map((_,i) => new Date(ini.getTime() + i*DIA).toISOString().slice(0,10));
+  const by = days.map(d => { const o = {d}; TIPOS_ALL.forEach(t => o[t] = rows.filter(m => m.data === d && tipoDe(m.tipo) === t).length); o.total = TIPOS_ALL.reduce((s,t)=>s+o[t],0); return o; });
+  const max = Math.max(1, ...by.map(o => o.total)), step = Math.max(1, Math.ceil(max/4));
+  const top = step*Math.ceil(max/step), y = v => pt + (H-pt-pb) * (1 - v/top), bw = Math.max(6, (W-pl)/15 - 8);
+  let s = `<svg width="${W}" height="${H}" role="img" aria-label="Movimentações por dia">`;
+  for (let v = 0; v <= top; v += step) s += `<line x1="${pl}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="${v?css("--grid"):css("--axis")}"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
+  by.forEach((o,i) => { const cx = pl + (W-pl)/15*(i+0.5), x0 = cx - bw/2; let acc = 0;
+    const segs = ativos.filter(t => o[t]);
+    segs.forEach((t,j) => { const y1 = y(acc + o[t]), y0 = y(acc), h = Math.max(0, y0 - y1 - (j ? 2 : 0)), isTop = j === segs.length-1, r = isTop ? Math.min(4, h/2, bw/2) : 0;
+      s += `<path d="M${x0},${y0-(j?2:0)} v${-(h-r)} ${r?`a${r},${r} 0 0 1 ${r},${-r} h${bw-2*r} a${r},${r} 0 0 1 ${r},${r}`:`h${bw}`} v${h-r} z" fill="${css(COR[t])}"/>`; acc += o[t]; });
+    if (i % 2 === 0 || W > 700) s += `<text x="${cx}" y="${H-8}" text-anchor="middle">${o.d.slice(8,10)}/${o.d.slice(5,7)}</text>`;
+    s += `<rect x="${cx-(W-pl)/30}" y="${pt}" width="${(W-pl)/15}" height="${H-pt-pb}" fill="transparent" data-i="${i}"/>`; });
+  el.innerHTML = s + "</svg>";
+  el.querySelectorAll("[data-i]").forEach(n => { const o = by[+n.dataset.i];
+    n.addEventListener("mousemove", e => showTip(e, `<b>${fData(o.d)}</b>${o.total ? ativos.filter(t=>o[t]).map(t => `<span class="pill"><span class="sw" style="background:var(${COR[t]})"></span>${t}: ${o[t]}</span>`).join("<br>") : "Nenhuma movimentação"}`));
+    n.addEventListener("mouseleave", hideTip); });
+  $("#tab2").innerHTML = rows.length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th>Município</th><th>Descrição</th><th>Fornecedor</th><th class="n">Valor</th><th>Fonte</th></tr></thead><tbody>${
+    rows.map(m => `<tr><td>${fData(m.data)}</td><td><span class="pill"><span class="sw" style="background:var(${COR[tipoDe(m.tipo)]})"></span>${esc(m.tipo)}</span></td><td>${esc(m.municipio)}</td><td>${esc(m.descricao)}</td><td>${esc(m.fornecedor) || '<span class="muted">—</span>'}</td><td class="n">${fBRL(m.valor)}</td><td>${link(m.link)}</td></tr>`).join("")
+  }</tbody></table>` : '<div class="empty">Nenhuma movimentação no período para os filtros.</div>';
+}
+["#f2tipo","#f2q"].forEach(s => $(s).addEventListener("input", render2));
+
+/* ---------- ABA 3: mapa ---------- */
+fillSelect($("#f3cat"), D.contratos.map(c => c.categoria));
+fillSelect($("#f3forn"), D.contratos.map(c => c.fornecedor));
+let GEO = null, NOMES = {}, SEL = null, geoErro = false;
+const CLASSES = [[0,"Nenhum","--q0"],[1,"1","--q1"],[2,"2","--q2"],[3,"3","--q3"],[4,"4 ou mais","--q4"]];
+const classe = n => CLASSES[Math.min(n, 4)];
+$("#lg3").innerHTML = CLASSES.map(([,l,c]) => `<span class="pill"><span class="sw" style="background:var(${c})"></span>${l}</span>`).join("");
+function contratosFiltrados(){ const cat = $("#f3cat").value, f = $("#f3forn").value;
+  return D.contratos.filter(c => (!cat || c.categoria === cat) && (!f || c.fornecedor === f)); }
+const vigente = c => dias(c.fim_vigencia) >= 0;
+async function carregarGeo(){
+  try {
+    const [g, m] = await Promise.all([
+      fetch("https://servicodados.ibge.gov.br/api/v3/malhas/estados/42?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio").then(r => { if(!r.ok) throw 0; return r.json(); }),
+      fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados/42/municipios").then(r => { if(!r.ok) throw 0; return r.json(); })]);
+    GEO = g; m.forEach(x => NOMES[String(x.id)] = x.nome);
+  } catch(e){ geoErro = true; }
+  render3();
+}
+function render3(){
+  const cs = contratosFiltrados(), vig = cs.filter(vigente);
+  // contratos de consórcio ficam no município sede: entram na lista, mas não pintam o mapa
+  const porMun = {}; vig.filter(c => c.tipo_orgao !== "Consórcio").forEach(c => (porMun[c.codigo_ibge] ??= []).push(c));
+  const vence12 = vig.filter(c => dias(c.fim_vigencia) <= 365);
+  kpis($("#k3"), [["Contratos vigentes", fNum(vig.length)], ["Prefeituras com contrato", fNum(Object.keys(porMun).length)],
+    ["Vencem em até 12 meses", fNum(vence12.length)], ["Valor dos vigentes", fBRL(vig.reduce((s,c)=>s+(c.valor||0),0))]]);
+  // mapa
+  const el = $("#mapa");
+  if (geoErro || !GEO){
+    el.innerHTML = geoErro ? `<div class="empty">Não foi possível carregar o mapa do IBGE (sem internet ou acesso bloqueado). A lista ao lado continua funcionando.</div>` : el.innerHTML;
+  } else {
+    const feats = GEO.features, pts = [];
+    const each = (geom, fn) => (geom.type === "Polygon" ? [geom.coordinates] : geom.coordinates).forEach(p => p.forEach(r => fn(r)));
+    feats.forEach(f => each(f.geometry, r => r.forEach(p => pts.push(p))));
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const k = Math.cos((minY+maxY)/2 * Math.PI/180);
+    const W = el.clientWidth || 600, sc = W / ((maxX-minX)*k), H = (maxY-minY)*sc;
+    const P = p => `${((p[0]-minX)*k*sc).toFixed(1)},${((maxY-p[1])*sc).toFixed(1)}`;
+    let s = `<svg width="${W}" height="${H}" role="img" aria-label="Mapa de Santa Catarina por município">`;
+    feats.forEach(f => { const cod = String(f.properties.codarea); let d = "";
+      each(f.geometry, r => d += "M" + r.map(P).join("L") + "Z");
+      const n = (porMun[cod] || []).length;
+      s += `<path d="${d}" fill="var(${classe(n)[2]})" data-cod="${cod}" class="${cod===SEL?"sel":""}"/>`; });
+    el.innerHTML = s + "</svg>";
+    el.querySelectorAll("path").forEach(p => { const cod = p.dataset.cod, nome = NOMES[cod] || cod, n = (porMun[cod]||[]).length;
+      p.addEventListener("mousemove", e => showTip(e, `<b>${esc(nome)}</b>${n} contrato${n===1?"":"s"} vigente${n===1?"":"s"}${n ? "<br>" + [...new Set(porMun[cod].map(c=>c.fornecedor))].map(esc).join(", ") : ""}`));
+      p.addEventListener("mouseleave", hideTip);
+      p.addEventListener("click", () => { SEL = cod; render3(); }); });
+  }
+  // painel do município
+  if (SEL){
+    const nome = NOMES[SEL] || (D.contratos.find(c => c.codigo_ibge === SEL) || {}).municipio || SEL;
+    const lista = cs.filter(c => c.codigo_ibge === SEL).sort((a,b) => (b.fim_vigencia||"").localeCompare(a.fim_vigencia||""));
+    $("#p3t").textContent = nome;
+    $("#p3n").textContent = `${lista.filter(vigente).length} contrato(s) vigente(s) de TI · clique em outro município para trocar`;
+    $("#p3").innerHTML = lista.length ? `<table><thead><tr><th>Fornecedor</th><th>Objeto</th><th class="n">Valor</th><th>Fim da vigência</th></tr></thead><tbody>${
+      lista.map(c => { const d = dias(c.fim_vigencia);
+        const st = d < 0 ? '<span class="muted">encerrado</span>' : d <= 365 ? `<span class="urg">vence em ${d} dias</span>` : `vence em ${d} dias`;
+        return `<tr><td>${esc(c.fornecedor)}<div class="muted">${esc(c.cnpj)}</div></td><td>${esc(c.objeto)}<div class="muted">${esc(c.categoria)}${c.tipo_orgao && c.tipo_orgao !== "Prefeitura" ? " · " + esc(c.tipo_orgao) + ": " + esc(c.orgao) : ""}</div></td><td class="n">${fBRL(c.valor)}</td><td>${fData(c.fim_vigencia)}<div>${st}</div></td></tr>`; }).join("")
+    }</tbody></table>` : '<div class="empty">Nenhum contrato de TI registrado para este município com os filtros atuais.</div>';
+  } else {
+    const munis = Object.entries(porMun).map(([cod,l]) => ({cod, nome: NOMES[cod] || l[0].municipio, n: l.length, prox: l.map(c=>c.fim_vigencia).sort()[0]})).sort((a,b) => b.n - a.n || a.nome.localeCompare(b.nome,"pt-BR"));
+    $("#p3").innerHTML = munis.length ? `<table><thead><tr><th>Município</th><th class="n">Vigentes</th><th>Próximo vencimento</th></tr></thead><tbody>${
+      munis.map(m => `<tr data-cod="${m.cod}" style="cursor:pointer"><td>${esc(m.nome)}</td><td class="n">${m.n}</td><td>${fData(m.prox)}</td></tr>`).join("")}</tbody></table>` : '<div class="empty">Nenhum contrato vigente para os filtros.</div>';
+    $("#p3").querySelectorAll("tr[data-cod]").forEach(tr => tr.addEventListener("click", () => { SEL = tr.dataset.cod; render3(); }));
+  }
+  // fornecedores
+  const pf = {}; vig.forEach(c => { pf[c.fornecedor] ??= new Set(); pf[c.fornecedor].add(c.codigo_ibge); });
+  hbars($("#ch3"), Object.entries(pf).map(([k,set]) => ({k, v:set.size})).sort((a,b) => b.v - a.v).slice(0,10), v => `${v} prefeitura${v===1?"":"s"}`);
+}
+["#f3cat","#f3forn"].forEach(s => $(s).addEventListener("input", () => render3()));
+
+/* ---------- render ---------- */
+function render(){
+  const tab = document.querySelector("nav button[aria-selected=true]").dataset.tab;
+  if (tab === "t1") render1(); else if (tab === "t2") render2(); else render3();
+}
+render();
+carregarGeo();
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+</script>
+</body>
+</html>

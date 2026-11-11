@@ -1,0 +1,16 @@
+# dados gerados (banco, logs, cache) e saídas
+data/
+saida/
+dashboard/dados.js
+dashboard/dados_fornecedor.js
+*.log
+
+# ambiente Python
+.venv/
+__pycache__/
+*.pyc
+
+# segredos e editores
+.env
+.vscode/
+.idea/

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fornecedor no mapa de SC</title>
+<style>
+:root{
+  color-scheme:light;
+  --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--ink3:#7a7974;
+  --grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);--wash:rgba(11,11,11,.04);
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;
+  --q0:#e8e7e1;--q1:#9ec5f4;--q2:#5598e7;--q3:#256abf;--q4:#104281;
+  --warn-bg:#fff4d6;--warn-ink:#6b4a00;--crit:#b3261e;
+}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){
+  color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--ink3:#8f8e87;
+  --grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--wash:rgba(255,255,255,.05);
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;
+  --q0:#2c2c2a;--q1:#184f95;--q2:#256abf;--q3:#3987e5;--q4:#86b6ef;
+  --warn-bg:#3a2e10;--warn-ink:#f3d58a;--crit:#ff8a80;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--ink:#f0efec;--ink2:#c3c2b7;--ink3:#8f8e87;
+  --grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);--wash:rgba(255,255,255,.05);
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;
+  --q0:#2c2c2a;--q1:#184f95;--q2:#256abf;--q3:#3987e5;--q4:#86b6ef;
+  --warn-bg:#3a2e10;--warn-ink:#f3d58a;--crit:#ff8a80;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 24px 0;max-width:1280px;margin:0 auto}
+h1{font-size:20px;margin:0 0 2px}
+.sub{color:var(--ink2);font-size:13px}
+.demo{margin:12px 0 0;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:13px}
+nav{display:flex;gap:4px;margin-top:16px;border-bottom:1px solid var(--grid);overflow-x:auto}
+nav button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font:inherit;color:var(--ink2);cursor:pointer;white-space:nowrap}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+main{max-width:1280px;margin:0 auto;padding:16px 24px 40px}
+section[hidden]{display:none}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center}
+.filters label{font-size:12px;color:var(--ink2);display:flex;flex-direction:column;gap:2px}
+select,input[type=search]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 8px;min-width:160px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.kpi .l{font-size:12px;color:var(--ink2)}
+.kpi .v{font-size:24px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.card h2{font-size:14px;margin:0 0 2px}
+.card .note{font-size:12px;color:var(--ink2);margin:0 0 10px}
+.grid2{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--axis);padding:6px 8px;white-space:nowrap}
+td{border-bottom:1px solid var(--grid);padding:6px 8px;vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:hover td{background:var(--wash)}
+a{color:var(--s1)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block;flex:none}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--ink2);margin-bottom:8px}
+svg text{fill:var(--ink2);font-size:11px}
+.tip{position:fixed;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:10;max-width:280px;display:none}
+.tip b{display:block;margin-bottom:2px}
+.muted{color:var(--ink3)}
+.urg{color:var(--crit);font-weight:600}
+#mapa path{stroke:var(--surface);stroke-width:.6;cursor:pointer}
+#mapa path:hover,#mapa path.sel{stroke:var(--ink);stroke-width:1.4}
+.empty{color:var(--ink2);padding:16px 0}
+#mapa path.semdado{fill:var(--q0)}
+.aviso{font-size:12px;color:var(--ink2);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="titulo">Fornecedor no mapa de SC</h1>
+  <div class="sub" id="sub"></div>
+</header>
+<main>
+  <div class="filters">
+    <label>Mostrar<select id="fvig"><option value="todos">Todos os contratos do fornecedor</option><option value="vig">Só vigentes</option></select></label>
+    <label>Buscar município<input type="search" id="fbusca" placeholder="ex.: Joinville"></label>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid2">
+    <div class="card"><h2>Situação por município</h2><p class="note">Passe o mouse para detalhes; clique para ver os contratos.</p><div class="legend" id="lg"></div><div id="mapa"><div class="empty">Carregando o mapa do IBGE…</div></div></div>
+    <div class="card"><h2 id="pt">Municípios com o fornecedor</h2><p class="note" id="pn"></p><div class="tablewrap" id="painel"></div></div>
+  </div>
+  <div class="card"><h2>Onde o fornecedor não está: quem atende com TI</h2><p class="note">Municípios sem contrato do fornecedor e com outro contrato de TI vigente. Top 10 fornecedores por número de municípios.</p><div id="outros"></div></div>
+  <p class="aviso">Fonte: PNCP, contratos publicados pelos órgãos municipais de SC. Contratos de consórcios intermunicipais aparecem na lista, mas não pintam o município sede. Contratos antigos (Lei 8.666) mantidos por aditivo podem não aparecer, e a vigência é a do registro do contrato: prorrogações por termo aditivo podem não estar refletidas.</p>
+</main>
+<div class="tip" id="tip"></div>
+<script src="dados_fornecedor.js"></script>
+<script>
+"use strict";
+const F = window.FORN, $ = s => document.querySelector(s), tip = $("#tip");
+if (!F) {
+  document.querySelector("main").innerHTML = '<div class="card"><h2>dados_fornecedor.js não encontrado</h2><p class="note">Na pasta do projeto, rode <code>python fornecedor_no_mapa.py</code> (ou <code>python fornecedor_no_mapa.py --exportar</code>, se a busca já foi feita) e recarregue esta página.</p></div>';
+  throw new Error("sem dados");
+}
+const fData = s => s ? s.split("-").reverse().join("/") : "—";
+const fNum = n => (n ?? 0).toLocaleString("pt-BR");
+function fBRL(v){ if (v == null || isNaN(v)) return "—";
+  if (Math.abs(v) >= 1e6) return "R$ " + (v/1e6).toLocaleString("pt-BR",{maximumFractionDigits:1}) + " mi";
+  if (Math.abs(v) >= 1e3) return "R$ " + (v/1e3).toLocaleString("pt-BR",{maximumFractionDigits:0}) + " mil";
+  return "R$ " + v.toLocaleString("pt-BR"); }
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const norm = s => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+function showTip(e, html){ tip.innerHTML = html; tip.style.display = "block";
+  const w = tip.offsetWidth, h = tip.offsetHeight; let x = e.clientX + 14, y = e.clientY + 14;
+  if (x + w > innerWidth - 8) x = e.clientX - w - 14; if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px"; }
+const hideTip = () => tip.style.display = "none";
+
+$("#titulo").textContent = F.fornecedor + " no mapa de SC";
+$("#sub").textContent = `CNPJ raiz ${F.cnpj_raiz} · contratos publicados no PNCP desde ${fData(F.desde)} · ${fNum(F.orgaos_consultados)} de ${fNum(F.orgaos_total)} órgãos municipais consultados · gerado em ${fData(F.gerado_em)}`;
+
+// situação de cada município (por código IBGE)
+const ST = [["vig", F.fornecedor + " com contrato vigente", "--s1"], ["enc", F.fornecedor + ", contratos encerrados", "--q1"],
+            ["out", "Outro fornecedor de TI vigente", "--s2"], ["sem", "Sem contrato de TI encontrado", "--q0"]];
+const COR = Object.fromEntries(ST.map(([k,,c]) => [k, c]));
+$("#lg").innerHTML = ST.map(([,l,c]) => `<span class="pill"><span class="sw" style="background:var(${c})"></span>${esc(l)}</span>`).join("");
+const porMun = {}, outrosMun = {}, NOMES = {};
+// contratos de consórcio ficam registrados no município sede: aparecem na lista, mas não pintam o mapa
+F.contratos.forEach(c => { if (c.tipo_orgao !== "Consórcio") (porMun[c.codigo_ibge] ??= []).push(c); });
+F.outros.forEach(c => (outrosMun[c.codigo_ibge] ??= []).push(c));
+function situacao(cod){
+  const l = porMun[cod];
+  if (l && l.some(c => c.vigente)) return "vig";
+  if (l && $("#fvig").value === "todos") return "enc";
+  return outrosMun[cod] ? "out" : "sem";
+}
+const nomeMun = cod => NOMES[cod] || ((porMun[cod]||outrosMun[cod]||[{}])[0].municipio) || cod;
+let GEO = null, geoErro = false, SEL = null;
+
+function render(){
+  const soVig = $("#fvig").value === "vig";
+  const lista = F.contratos.filter(c => !soVig || c.vigente);
+  const munis = new Set(lista.map(c => c.codigo_ibge)), munVig = new Set(F.contratos.filter(c => c.vigente).map(c => c.codigo_ibge));
+  $("#kpis").innerHTML = [["Municípios com contrato vigente", fNum(munVig.size)], ["Contratos " + (soVig ? "vigentes" : "encontrados"), fNum(lista.length)],
+    ["Valor dos contratos", fBRL(lista.reduce((s,c) => s + (c.valor_global||0), 0))],
+    ["Vencem em até 12 meses", fNum(F.contratos.filter(c => c.vigente && c.fim_vigencia && (new Date(c.fim_vigencia) - new Date(F.gerado_em)) / 864e5 <= 365).length)]]
+    .map(([l,v]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
+  desenharMapa(); painel(lista); outros();
+}
+
+function desenharMapa(){
+  const el = $("#mapa");
+  if (geoErro){ el.innerHTML = '<div class="empty">Não foi possível carregar o mapa do IBGE (sem internet ou acesso bloqueado). A lista ao lado continua funcionando.</div>'; return; }
+  if (!GEO) return;
+  const feats = GEO.features, pts = [];
+  const each = (g, fn) => (g.type === "Polygon" ? [g.coordinates] : g.coordinates).forEach(p => p.forEach(r => fn(r)));
+  feats.forEach(f => each(f.geometry, r => r.forEach(p => pts.push(p))));
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const k = Math.cos((minY+maxY)/2 * Math.PI/180), W = el.clientWidth || 600, sc = W / ((maxX-minX)*k), H = (maxY-minY)*sc;
+  const P = p => `${((p[0]-minX)*k*sc).toFixed(1)},${((maxY-p[1])*sc).toFixed(1)}`;
+  let s = `<svg width="${W}" height="${H}" role="img" aria-label="Mapa de Santa Catarina: situação do fornecedor por município">`;
+  feats.forEach(f => { const cod = String(f.properties.codarea); let d = "";
+    each(f.geometry, r => d += "M" + r.map(P).join("L") + "Z");
+    s += `<path d="${d}" fill="var(${COR[situacao(cod)]})" data-cod="${cod}" class="${cod===SEL?"sel":""}"/>`; });
+  el.innerHTML = s + "</svg>";
+  el.querySelectorAll("path").forEach(p => { const cod = p.dataset.cod;
+    p.addEventListener("mousemove", e => {
+      const l = porMun[cod] || [], o = outrosMun[cod] || [], st = situacao(cod);
+      let h = `<b>${esc(nomeMun(cod))}</b>`;
+      if (l.length) h += `${l.length} contrato(s) do fornecedor, ${l.filter(c=>c.vigente).length} vigente(s)<br>Valor: ${fBRL(l.reduce((s,c)=>s+(c.valor_global||0),0))}`;
+      else if (o.length) h += `Sem ${esc(F.fornecedor)}. TI vigente com: ${esc([...new Set(o.map(c=>c.fornecedor))].slice(0,3).join(", "))}`;
+      else h += "Nenhum contrato de TI encontrado";
+      showTip(e, h); });
+    p.addEventListener("mouseleave", hideTip);
+    p.addEventListener("click", () => { SEL = SEL === cod ? null : cod; render(); }); });
+}
+
+function painel(lista){
+  const busca = norm($("#fbusca").value);
+  if (SEL){
+    const l = (porMun[SEL] || []).slice().sort((a,b) => (b.fim_vigencia||"").localeCompare(a.fim_vigencia||""));
+    const o = outrosMun[SEL] || [];
+    $("#pt").textContent = nomeMun(SEL);
+    $("#pn").textContent = "Clique de novo no município (ou em outro) para trocar.";
+    const linha = c => `<tr><td>${esc(c.objeto)}<div class="muted">${esc(c.orgao)}${c.tipo_orgao ? " (" + esc(c.tipo_orgao) + ")" : ""}${c.fornecedor && !(F.raizes||[F.cnpj_raiz]).some(r => String(c.fornecedor_cnpj||"").startsWith(r)) ? " · " + esc(c.fornecedor) : ""}</div></td><td class="n">${fBRL(c.valor_global)}</td><td>${fData(c.fim_vigencia)}<div class="muted">${c.vigente ? "vigente" : "encerrado no PNCP"}</div></td><td>${c.link ? `<a href="${esc(c.link)}" target="_blank" rel="noopener">PNCP</a>` : ""}</td></tr>`;
+    $("#painel").innerHTML =
+      (l.length ? `<table><thead><tr><th>Contrato do fornecedor</th><th class="n">Valor</th><th>Fim da vigência</th><th></th></tr></thead><tbody>${l.map(linha).join("")}</tbody></table>`
+                : `<div class="empty">Nenhum contrato de ${esc(F.fornecedor)} encontrado neste município.</div>`) +
+      (o.length ? `<h2 style="margin-top:14px">Outros contratos de TI vigentes</h2><table><tbody>${o.map(linha).join("")}</tbody></table>` : "");
+    return;
+  }
+  const munis = {};
+  lista.forEach(c => { const m = munis[c.codigo_ibge] ??= {cod: c.codigo_ibge, nome: nomeMun(c.codigo_ibge), n: 0, vig: 0, valor: 0, fim: ""};
+    m.n++; if (c.vigente) m.vig++; m.valor += c.valor_global || 0; if ((c.fim_vigencia||"") > m.fim) m.fim = c.fim_vigencia; });
+  const rows = Object.values(munis).filter(m => !busca || norm(m.nome).includes(busca)).sort((a,b) => b.valor - a.valor);
+  $("#pt").textContent = "Municípios com o fornecedor";
+  $("#pn").textContent = `${rows.length} município(s). Ordenado por valor; clique numa linha para ver os contratos.`;
+  $("#painel").innerHTML = rows.length ? `<table><thead><tr><th>Município</th><th class="n">Contratos</th><th class="n">Vigentes</th><th class="n">Valor</th><th>Vigência até</th></tr></thead><tbody>${
+    rows.map(m => `<tr data-cod="${m.cod}" style="cursor:pointer"><td>${esc(m.nome)}</td><td class="n">${m.n}</td><td class="n">${m.vig}</td><td class="n">${fBRL(m.valor)}</td><td>${fData(m.fim)}</td></tr>`).join("")}</tbody></table>`
+    : '<div class="empty">Nenhum contrato do fornecedor encontrado (ainda). Se a busca foi interrompida, rode o script de novo para continuar.</div>';
+  $("#painel").querySelectorAll("tr[data-cod]").forEach(tr => tr.addEventListener("click", () => { SEL = tr.dataset.cod; render(); }));
+}
+
+function outros(){
+  const el = $("#outros"), cont = {};
+  Object.entries(outrosMun).forEach(([cod, l]) => { if (porMun[cod]) return; new Set(l.map(c => c.fornecedor)).forEach(f => (cont[f] ??= new Set()).add(cod)); });
+  const rows = Object.entries(cont).map(([k,s]) => ({k, v: s.size})).sort((a,b) => b.v - a.v).slice(0, 10);
+  if (!rows.length){ el.innerHTML = '<div class="empty">Nenhum outro contrato de TI vigente no cache.</div>'; return; }
+  const W = el.clientWidth || 600, lw = Math.min(260, W*0.45), rh = 28, bh = 16, max = rows[0].v;
+  let s = `<svg width="${W}" height="${rows.length*rh+4}" role="img" aria-label="Fornecedores de TI onde o fornecedor buscado não está">`;
+  rows.forEach((r,i) => { const y = i*rh+4, w = Math.max(4, (W-lw-90)*r.v/max), nome = r.k.length > 38 ? r.k.slice(0,37) + "…" : r.k;
+    s += `<text x="${lw-8}" y="${y+bh/2+4}" text-anchor="end"><title>${esc(r.k)}</title>${esc(nome)}</text>`;
+    s += `<path d="M${lw},${y} h${w-4} a4,4 0 0 1 4,4 v${bh-8} a4,4 0 0 1 -4,4 h${-(w-4)} z" fill="var(--s2)"><title>${esc(r.k)}: ${r.v} município(s)</title></path>`;
+    s += `<text x="${lw+w+6}" y="${y+bh/2+4}" style="fill:var(--ink)">${r.v} município${r.v===1?"":"s"}</text>`; });
+  el.innerHTML = s + "</svg>";
+}
+
+["#fvig","#fbusca"].forEach(s => $(s).addEventListener("input", () => { SEL = null; render(); }));
+render();
+Promise.all([
+  fetch("https://servicodados.ibge.gov.br/api/v3/malhas/estados/42?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=municipio").then(r => { if(!r.ok) throw 0; return r.json(); }),
+  fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados/42/municipios").then(r => { if(!r.ok) throw 0; return r.json(); })])
+  .then(([g, m]) => { GEO = g; m.forEach(x => NOMES[String(x.id)] = x.nome); })
+  .catch(() => { geoErro = true; })
+  .finally(render);
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+</script>
+</body>
+</html>
