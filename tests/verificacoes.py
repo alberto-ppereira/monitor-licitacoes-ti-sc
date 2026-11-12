@@ -26,7 +26,7 @@ def contratacao(i, objeto, municipio, ibge_cod, uf="SC", pub=-3, enc=10, valor=5
                 situacao="Divulgada no PNCP"):
     return {"numeroControlePNCP": f"0000-1-{i:06d}/2026", "anoCompra": 2026, "objetoCompra": objeto,
             "modalidadeNome": "Pregão - Eletrônico", "valorTotalEstimado": valor, "valorTotalHomologado": None,
-            "situacaoCompraNome": situacao, "usuarioNome": "IPM Sistemas", "dataPublicacaoPncp": d(pub) + "T09:00:00",
+            "situacaoCompraNome": situacao, "usuarioNome": "Sistema A", "dataPublicacaoPncp": d(pub) + "T09:00:00",
             "dataAberturaProposta": d(pub) + "T09:00:00", "dataEncerramentoProposta": d(enc) + "T09:00:00",
             "linkSistemaOrigem": f"https://exemplo.invalid/{i}",
             "orgaoEntidade": {"cnpj": CNPJ.get(municipio, CNPJ["IFSC"] if esfera == "F" else "0"),
@@ -38,7 +38,7 @@ def contrato(i, objeto, municipio, ibge_cod, uf="SC", assin=-5, fim=200, forn="E
     return {"numeroControlePNCP": f"{CNPJ[municipio]}-2-{i:06d}/2026", "numeroControlePncpCompra": None, "objetoContrato": objeto,
             "niFornecedor": "11111111000111", "nomeRazaoSocialFornecedor": forn, "valorInicial": 100000,
             "valorGlobal": 120000, "dataAssinatura": d(assin), "dataVigenciaInicio": d(assin), "dataVigenciaFim": d(fim),
-            "dataPublicacaoPncp": d(assin) + "T10:00:00", "tipoContrato": {"nome": "Contrato"}, "usuarioNome": "Betha Sistemas",
+            "dataPublicacaoPncp": d(assin) + "T10:00:00", "tipoContrato": {"nome": "Contrato"}, "usuarioNome": "Sistema B",
             "categoriaProcesso": {"nome": cat},
             "orgaoEntidade": {"cnpj": CNPJ[municipio], "razaoSocial": f"MUNICIPIO DE {municipio}", "esferaId": "M"},
             "unidadeOrgao": {"ufSigla": uf, "municipioNome": municipio, "codigoIbge": ibge_cod}}
@@ -95,7 +95,26 @@ def api_falsa(url, params=None):
             raise requests.HTTPError("HTTP 400")
         dados = [c for c in CONTRATOS if not cnpj or c["orgaoEntidade"]["cnpj"] == cnpj]
         return {"data": dados, "totalPaginas": 1} if dados else None
+    if url.endswith("/api/search/"):
+        itens = [it for it in BUSCA if params["data_assinatura_inicio"] <= it["data_assinatura"] <= params["data_assinatura_fim"]]
+        tam = params["tam_pagina"]
+        return {"total": len(itens), "items": itens[(pagina - 1) * tam: pagina * tam]}
     raise AssertionError(f"URL inesperada: {url}")
+
+
+def item_busca(i, objeto, assin, esfera="M", cancelado=False, forn="Sistema Web Ltda"):
+    return {"numero_controle_pncp": f"83102277000152-2-{i:06d}/2023", "numero_contratacao": None,
+            "orgao_cnpj": "83102277000152", "orgao_nome": "MUNICIPIO DE ITAJAI", "esfera_id": esfera,
+            "codigo_ibge": "4208203", "municipio_nome": "Itajaí", "uf": "SC", "fornecedor_ni": "55666777000188",
+            "fornecedor_nome": forn, "description": objeto, "valor_global": 1000.0 * i, "data_assinatura": assin,
+            "data_inicio_vigencia": assin, "data_fim_vigencia": "2030-01-01", "data_publicacao_pncp": assin + "T10:00:00",
+            "tipo_contrato_nome": "Contrato (termo inicial)", "usuario_nome": "Sistema A", "cancelado": cancelado}
+
+
+BUSCA = [item_busca(i, "Locação de sistema web integrado de gestão pública", f"2023-0{1 + i % 3}-1{i % 9}") for i in range(1, 8)] + [
+    item_busca(20, "Sistema de ar condicionado", "2023-02-10"),
+    item_busca(21, "Licença de uso de software", "2023-02-11", esfera="F"),
+    item_busca(22, "Licença de uso de software", "2023-02-12", cancelado=True)]
 
 
 def checar(nome, condicao):
@@ -116,7 +135,7 @@ def main():
     checar("filtro de TI reconhece software de gestão", tratamento.eh_ti("Licença de uso de software de gestão"))
     checar("filtro de TI exclui toner", not tratamento.eh_ti("Aquisição de toner para impressoras"))
     checar("filtro de TI não casa 'erp' dentro de outra palavra", not tratamento.eh_ti("Serviços de serpentina"))
-    checar("filtro de TI: 'sistema web integrado' (objeto típico da IPM) é TI",
+    checar("filtro de TI: 'sistema web integrado' (objeto típico de ERP municipal) é TI",
            tratamento.eh_ti("Locação de sistema web integrado de gestão pública municipal, em nuvem"))
     checar("filtro de TI: 'cadastro mobiliário' não derruba um ERP; aquisição de mobiliário continua fora",
            tratamento.eh_ti("Locação de sistema ERP: cadastro imobiliário, cadastro mobiliário e ISS")
@@ -126,6 +145,16 @@ def main():
                                                                "CAIXA ECONOMICA FEDERAL", "IFSC"]})
     checar("esfera: municípios e consórcios entram; Caixa (N) e federal ficam fora",
            tratamento.na_esfera(_o).tolist() == [True, True, False, False])
+    checar("termo forte vence exclusão: ERP com 'bens móveis e imóveis' e gestão documental com 'digitalização' são TI",
+           tratamento.eh_ti("Sistema web integrado: patrimônio de bens móveis e imóveis")
+           and tratamento.eh_ti("Locação de sistema de informática GEDOC sob licença de uso, com digitalização"))
+    checar("prefixo '[Portal de Compras Públicas]' do objeto não faz uma obra virar TI",
+           not tratamento.eh_ti("[Portal de Compras Públicas] - Execução de obra de pavimentação")
+           and tratamento.eh_ti("[Portal de Compras Públicas] - Locação de sistema web integrado de gestão"))
+    checar("assessoria em gestão pública (sem software) não é TI",
+           not tratamento.eh_ti("Serviços de assessoria e consultoria em gestão pública municipal"))
+    checar("esfera N: agência intermunicipal entra",
+           tratamento.na_esfera(_pd.DataFrame({"esfera": ["N"], "orgao": ["AGENCIA PUBLICA INTERMUNICIPAL DE SERVICOS DO VALE EUROPEU"]})).tolist() == [True])
     checar("tipo de órgão pelo nome (prefeitura, câmara, fundo, fundação, autarquia, consórcio)",
            [tratamento.tipo_orgao(n) for n in ["MUNICIPIO DE BRUSQUE", "CAMARA MUNICIPAL DE PORTO BELO",
             "FUNDO MUNICIPAL DE SAUDE DE PENHA", "FUNDACAO CULTURAL DE BRUSQUE", "INSTITUTO BRUSQUENSE DE PREVIDENCIA - IBPREV",
@@ -142,8 +171,8 @@ def main():
     import requests
 
     class Resp:
-        def __init__(self, status, corpo=None):
-            self.status_code, self._corpo, self.content = status, corpo, b"{}"
+        def __init__(self, status, corpo=None, headers=None):
+            self.status_code, self._corpo, self.content, self.headers = status, corpo, b"{}", headers or {}
         def json(self):
             return self._corpo
         def raise_for_status(self):
@@ -170,6 +199,11 @@ def main():
     except requests.HTTPError:
         r404 = falsa.chamadas == 1
     checar("404 não é repetido", r404)
+    falsa = Sessao([Resp(429, headers={"Retry-After": "3"}), Resp(429), Resp(200, {"data": [2]})])
+    api._freio.update(extra=0.0, ate=0.0)
+    ok429 = api.get_json("u") == {"data": [2]} and falsa.chamadas == 3
+    checar("429: espera e tenta de novo, e o intervalo entre chamadas aumenta (freio)", ok429 and api._freio["extra"] > 0)
+    api._freio.update(extra=0.0, ate=0.0)
     api.time, api._sessao = tempo_real, sessao_real
 
     # coleta de ponta a ponta com APIs simuladas
@@ -228,12 +262,13 @@ def main():
         antigo.close()
         # reclassificar com um único termo de TI: Joinville (sistema integrado) fica, Blumenau (saúde) sai
         termos = list(C.TERMOS_TI)
-        tratamento._TI = tratamento._regex(["sistema integrado"])
+        tratamento._TI, forte = tratamento._regex(["sistema integrado"]), tratamento._TI_FORTE
+        tratamento._TI_FORTE = tratamento._regex(["termo que nao existe"])
         M.reclassificar(con)
         k3 = banco.ler(con, "contratacoes").set_index("id_pncp")["ti"]
         checar("reclassificar refaz a marcação sem baixar nada",
                k3["0000-1-000003/2026"] == 0 and k3["0000-1-000001/2026"] == 1)
-        tratamento._TI = tratamento._regex(termos)
+        tratamento._TI, tratamento._TI_FORTE = tratamento._regex(termos), forte
         M.reclassificar(con)
         # carga de órgãos a partir de uma exportação do portal do PNCP (só SC entra)
         csv = Path(tmp) / "portal.csv"
@@ -248,6 +283,49 @@ def main():
                "11222333000144" in org3 and "76417005000186" not in org3 and banco.ler_controle(con, "carga_orgaos"))
         M.carregar_orgaos(con, 30, None)
         checar("carga de órgãos por período percorre as licitações publicadas", CNPJ["Joinville"] in set(banco.ler(con, "orgaos")["orgao_cnpj"]))
+        CHAMADAS.clear()
+        M.carregar_orgaos(con, 30, None)
+        checar("carga de órgãos retomável: blocos já feitos não são refeitos",
+               not any(u.endswith("/contratacoes/publicacao") for u, _ in CHAMADAS))
+        try:
+            M.carregar_orgaos(con, None, [str(Path(tmp) / "nao_existe.csv")])
+            msg_ok = False
+        except SystemExit as e:
+            msg_ok = "Arquivo não encontrado" in str(e)
+        checar("CSV inexistente: mensagem clara em vez de erro do pandas", msg_ok)
+        # importação de exportação do portal (órgãos e contratos)
+        cols = ["Id Contrato PNCP", "Id Contratação PNCP", "CNPJ do Órgão/Entidade", "Razão Social do Órgão/Entidade",
+                "Código da Esfera do Órgão/Entidade", "Código IBGE do Município da Unidade Executora",
+                "Nome do Município da Unidade Executora", "Sigla UF da Unidade Executora", "NI do fornecedor (sem máscara)",
+                "Nome do fornecedor", "Objeto do Contrato/Empenho", "Valor Global Contratado", "Data de Assinatura",
+                "Data de Início da Vigência", "Data de Fim da Vigência", "Data de Publicação no PNCP",
+                "Nome do Tipo do Contrato/Empenho", "Nome da Fonte/Plataforma"]
+        fim = (HOJE + timedelta(days=300)).strftime("%d/%m/%Y")
+        lin = ["11222333000144-2-000001/2026", "11222333000144-1-000001/2026", "11222333000144", "CAMARA MUNICIPAL DE LAGES",
+               "M", "4209300", "Lages", "SC", "55666777000188", "Software Legislativo Ltda",
+               "Locação de sistema web integrado de gestão legislativa", "R$ 40.552,08", "01/02/2026", "01/02/2026", fim,
+               "01/02/2026", "Contrato (termo inicial)", "Sistema A"]
+        csv2 = Path(tmp) / "portal_contratos.csv"
+        csv2.write_text("\ufeff" + ";".join(cols) + "\r\n" + ";".join(lin) + "\r\n", encoding="utf-8")
+        M.importar(con, [str(csv2)])
+        imp = banco.ler(con, "contratos").set_index("id_pncp").loc["11222333000144-2-000001/2026"]
+        checar("importar: contrato do portal com valor, datas e TI convertidos",
+               abs(imp["valor_global"] - 40552.08) < 0.01 and imp["data_assinatura"] == "2026-02-01" and imp["ti"] == 1)
+        # busca textual do portal: páginas, divisão de período acima do limite, cancelados e federais fora
+        C.BUSCA_TAMANHO_PAGINA, C.BUSCA_MAX_RESULTADOS, max_ant = 3, 6, C.BUSCA_MAX_RESULTADOS
+        CHAMADAS.clear()
+        M.buscar(con, "sistema", date(2023, 1, 1))
+        b = banco.ler(con, "contratos")
+        b = b[b["id_pncp"].str.endswith("/2023")]
+        checar("buscar: contratos da busca do portal gravados com TI; cancelado e federal fora",
+               len(b) == 8 and int(b["ti"].sum()) == 7 and set(b["plataforma"]) == {"Sistema A"})
+        checar("buscar: período acima do limite de resultados é dividido e todas as páginas são lidas",
+               any(p.get("pagina") == 2 for u, p in CHAMADAS if u.endswith("/api/search/")))
+        CHAMADAS.clear()
+        M.buscar(con, "sistema", date(2023, 1, 1))
+        feitos = [p for u, p in CHAMADAS if u.endswith("/api/search/") and p["data_assinatura_fim"] < "2026-01-01"]
+        checar("buscar: blocos encerrados já concluídos não são refeitos", not feitos)
+        C.BUSCA_MAX_RESULTADOS = max_ant
         M.exportar(con)
         con.close()
         saida = C.SAIDA
@@ -256,14 +334,23 @@ def main():
         ct = pd.read_csv(saida / "contratos.csv")
         checar("arquivos gerados", all((saida / f).exists() for f in
                ["oportunidades.csv", "movimentacoes.csv", "contratos.csv", "monitor_licitacoes.xlsx", "dados.js"]))
+        lk = saida / "looker"
+        checar("tabelas do Looker geradas (5 CSVs, UTF-8 sem BOM, coluna 'local' geográfica)",
+               all((lk / f"{n}.csv").exists() for n in ["oportunidades", "movimentacoes", "contratos", "municipios", "fornecedores"])
+               and not (lk / "contratos.csv").read_bytes().startswith(b"\xef\xbb\xbf")
+               and pd.read_csv(lk / "municipios.csv")["local"].str.endswith(", SC, Brasil").all())
+        mlk = pd.read_csv(lk / "municipios.csv", dtype={"codigo_ibge": str}).set_index("municipio")
+        checar("Looker: um registro por município, com contratos vigentes e situação",
+               len(mlk) == len(MUNICIPIOS) and mlk.loc["Itajaí", "contratos_vigentes"] >= 1
+               and set(mlk["situacao_ti"]) <= {"Com contrato de TI vigente", "Sem contrato de TI vigente no PNCP"})
         checar("colunas no formato do dashboard", list(op.columns) == exportacao.COLS_OPORTUNIDADES
                and list(mv.columns) == exportacao.COLS_MOVIMENTACOES and list(ct.columns) == exportacao.COLS_CONTRATOS)
         checar("oportunidades só com disputa a partir de hoje (Lages, encerrada, fora)", "Lages" not in set(op["municipio"]) and len(op) == 3)
         checar("licitação suspensa não aparece como oportunidade (Itajaí)", "Itajaí" not in set(op["municipio"]))
-        checar("plataforma de publicação guardada e exportada", set(op["plataforma"]) == {"IPM Sistemas"}
-               and set(ct["plataforma"]) == {"Betha Sistemas"})
+        checar("plataforma de publicação guardada e exportada", set(op["plataforma"]) == {"Sistema A"}
+               and set(ct["plataforma"]) == {"Sistema A", "Sistema B"})
         checar("contratos exportados com link do PNCP e tipo de órgão",
-               ct["link"].str.startswith("https://pncp.gov.br/contratos/").all() and set(ct["tipo_orgao"]) == {"Prefeitura"})
+               ct["link"].str.startswith("https://pncp.gov.br/contratos/").all() and "Câmara" in set(ct["tipo_orgao"]))
         checar("notas entre 0 e 10, maior para Joinville (porte e valor)", op["nota"].between(0, 10).all() and op.iloc[0]["municipio"] == "Joinville")
         checar("movimentações só dos últimos 15 dias (contrato de 400 dias fora)",
                set(mv["tipo"]) == {"Licitação publicada", "Contrato assinado"} and (mv["data"] >= d(-14)).all())

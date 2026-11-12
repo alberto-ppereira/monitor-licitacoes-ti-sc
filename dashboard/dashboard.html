@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -31,14 +31,14 @@
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-header{padding:20px 24px 0;max-width:1280px;margin:0 auto}
+header{padding:20px 24px 0}
 h1{font-size:20px;margin:0 0 2px}
 .sub{color:var(--ink2);font-size:13px}
 .demo{margin:12px 0 0;padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn-ink);font-size:13px}
 nav{display:flex;gap:4px;margin-top:16px;border-bottom:1px solid var(--grid);overflow-x:auto}
 nav button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font:inherit;color:var(--ink2);cursor:pointer;white-space:nowrap}
 nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
-main{max-width:1280px;margin:0 auto;padding:16px 24px 40px}
+main{padding:16px 24px 40px}
 section[hidden]{display:none}
 .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center}
 .filters label{font-size:12px;color:var(--ink2);display:flex;flex-direction:column;gap:2px}
@@ -51,8 +51,14 @@ select,input[type=search]{font:inherit;color:var(--ink);background:var(--surface
 .card h2{font-size:14px;margin:0 0 2px}
 .card .note{font-size:12px;color:var(--ink2);margin:0 0 10px}
 .grid2{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px}
-@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+.grid-mapa{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.grid-mov{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:16px;align-items:start}
+@media (max-width:1200px){.grid-mov{grid-template-columns:1fr}}
+@media (max-width:900px){.grid2,.grid-mapa{grid-template-columns:1fr}}
 .tablewrap{overflow-x:auto}
+#p3{max-height:72vh;overflow-y:auto}
+#tab2{max-height:72vh;overflow-y:auto}
+.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--axis);padding:6px 8px;white-space:nowrap}
 td{border-bottom:1px solid var(--grid);padding:6px 8px;vertical-align:top}
@@ -105,8 +111,10 @@ svg text{fill:var(--ink2);font-size:11px}
       <label>Buscar<input type="search" id="f2q" placeholder="Município, fornecedor ou descrição"></label>
     </div>
     <div class="kpis" id="k2"></div>
-    <div class="card"><h2>Movimentações por dia</h2><p class="note" id="n2"></p><div class="legend" id="lg2"></div><div id="ch2"></div></div>
-    <div class="card"><h2>Lista de movimentações</h2><div class="tablewrap" id="tab2"></div></div>
+    <div class="grid-mov">
+      <div class="card"><h2>Movimentações por dia</h2><p class="note" id="n2"></p><div class="legend" id="lg2"></div><div id="ch2"></div></div>
+      <div class="card"><h2>Lista de movimentações</h2><div class="tablewrap" id="tab2"></div></div>
+    </div>
   </section>
 
   <!-- ABA 3 -->
@@ -116,8 +124,8 @@ svg text{fill:var(--ink2);font-size:11px}
       <label>Fornecedor<select id="f3forn"><option value="">Todos</option></select></label>
     </div>
     <div class="kpis" id="k3"></div>
-    <div class="grid2">
-      <div class="card"><h2>Contratos de TI vigentes por prefeitura</h2><p class="note">Clique num município para ver os contratos. A vigência é a do registro do contrato no PNCP: prorrogações por termo aditivo podem não estar refletidas.</p><div class="legend" id="lg3"></div><div id="mapa"><div class="empty">Carregando o mapa do IBGE…</div></div></div>
+    <div class="grid-mapa">
+      <div class="card"><h2>Contratos de TI vigentes por prefeitura</h2><p class="note">Clique num município para ver os contratos. Contratos de consórcios contam no município sede. A vigência é a do registro do contrato no PNCP: prorrogações por termo aditivo podem não estar refletidas.</p><div class="legend" id="lg3"></div><div id="mapa"><div class="empty">Carregando o mapa do IBGE…</div></div></div>
       <div class="card"><h2 id="p3t">Selecione um município</h2><p class="note" id="p3n">Ou veja abaixo os fornecedores com mais prefeituras.</p><div class="tablewrap" id="p3"></div></div>
     </div>
     <div class="card"><h2>Fornecedores por número de prefeituras com contrato vigente</h2><p class="note">Respeita os filtros acima.</p><div id="ch3"></div></div>
@@ -204,7 +212,7 @@ function render1(){
   $("#tab1").innerHTML = rows.length ? `<table><thead><tr><th class="n">Nota</th><th>Município</th><th>Objeto</th><th>Categoria</th><th class="n">Valor estimado</th><th>Abertura</th><th>Edital</th></tr></thead><tbody>${
     rows.map(o => { const d = dias(o.data_abertura);
       const prazo = d == null ? "" : d < 0 ? '<span class="muted">encerrada</span>' : d <= 7 ? `<span class="urg">em ${d} dia${d===1?"":"s"}</span>` : `em ${d} dias`;
-      return `<tr><td class="n"><b>${o.nota?.toLocaleString("pt-BR") ?? "—"}</b></td><td>${esc(o.municipio)}</td><td>${esc(o.objeto)}<div class="muted">${esc(o.orgao)} · ${esc(o.modalidade)}${o.plataforma ? " · publicado via " + esc(o.plataforma) : ""}</div></td><td>${esc(o.categoria)}</td><td class="n">${fBRL(o.valor_estimado)}</td><td>${fData(o.data_abertura)}<div>${prazo}</div></td><td>${link(o.link)}</td></tr>`; }).join("")
+      return `<tr><td class="n"><b>${o.nota?.toLocaleString("pt-BR") ?? "—"}</b></td><td>${esc(o.municipio)}</td><td><div class="clamp" title="${esc(o.objeto)}">${esc(o.objeto)}</div><div class="muted">${esc(o.orgao)} · ${esc(o.modalidade)}${o.plataforma ? " · publicado via " + esc(o.plataforma) : ""}</div></td><td>${esc(o.categoria)}</td><td class="n">${fBRL(o.valor_estimado)}</td><td>${fData(o.data_abertura)}<div>${prazo}</div></td><td>${link(o.link)}</td></tr>`; }).join("")
   }</tbody></table>` : '<div class="empty">Nenhuma oportunidade para os filtros.</div>';
   const porCat = {}; rows.forEach(o => { porCat[o.categoria] ??= {v:0,n:0}; porCat[o.categoria].v += o.valor_estimado || 0; porCat[o.categoria].n++; });
   hbars($("#ch1"), Object.entries(porCat).map(([k,x]) => ({k, v:x.v, extra:`${x.n} oportunidade${x.n>1?"s":""}`})).sort((a,b) => b.v - a.v), fBRL);
@@ -248,7 +256,7 @@ function render2(){
     n.addEventListener("mousemove", e => showTip(e, `<b>${fData(o.d)}</b>${o.total ? ativos.filter(t=>o[t]).map(t => `<span class="pill"><span class="sw" style="background:var(${COR[t]})"></span>${t}: ${o[t]}</span>`).join("<br>") : "Nenhuma movimentação"}`));
     n.addEventListener("mouseleave", hideTip); });
   $("#tab2").innerHTML = rows.length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th>Município</th><th>Descrição</th><th>Fornecedor</th><th class="n">Valor</th><th>Fonte</th></tr></thead><tbody>${
-    rows.map(m => `<tr><td>${fData(m.data)}</td><td><span class="pill"><span class="sw" style="background:var(${COR[tipoDe(m.tipo)]})"></span>${esc(m.tipo)}</span></td><td>${esc(m.municipio)}</td><td>${esc(m.descricao)}</td><td>${esc(m.fornecedor) || '<span class="muted">—</span>'}</td><td class="n">${fBRL(m.valor)}</td><td>${link(m.link)}</td></tr>`).join("")
+    rows.map(m => `<tr><td>${fData(m.data)}</td><td><span class="pill"><span class="sw" style="background:var(${COR[tipoDe(m.tipo)]})"></span>${esc(m.tipo)}</span></td><td>${esc(m.municipio)}</td><td><div class="clamp" title="${esc(m.descricao)}">${esc(m.descricao)}</div></td><td>${esc(m.fornecedor) || '<span class="muted">—</span>'}</td><td class="n">${fBRL(m.valor)}</td><td>${link(m.link)}</td></tr>`).join("")
   }</tbody></table>` : '<div class="empty">Nenhuma movimentação no período para os filtros.</div>';
 }
 ["#f2tipo","#f2q"].forEach(s => $(s).addEventListener("input", render2));
@@ -274,8 +282,8 @@ async function carregarGeo(){
 }
 function render3(){
   const cs = contratosFiltrados(), vig = cs.filter(vigente);
-  // contratos de consórcio ficam no município sede: entram na lista, mas não pintam o mapa
-  const porMun = {}; vig.filter(c => c.tipo_orgao !== "Consórcio").forEach(c => (porMun[c.codigo_ibge] ??= []).push(c));
+  // contratos de consórcios contam no município sede (é onde o PNCP os registra)
+  const porMun = {}; vig.forEach(c => (porMun[c.codigo_ibge] ??= []).push(c));
   const vence12 = vig.filter(c => dias(c.fim_vigencia) <= 365);
   kpis($("#k3"), [["Contratos vigentes", fNum(vig.length)], ["Prefeituras com contrato", fNum(Object.keys(porMun).length)],
     ["Vencem em até 12 meses", fNum(vence12.length)], ["Valor dos vigentes", fBRL(vig.reduce((s,c)=>s+(c.valor||0),0))]]);
@@ -299,7 +307,8 @@ function render3(){
       s += `<path d="${d}" fill="var(${classe(n)[2]})" data-cod="${cod}" class="${cod===SEL?"sel":""}"/>`; });
     el.innerHTML = s + "</svg>";
     el.querySelectorAll("path").forEach(p => { const cod = p.dataset.cod, nome = NOMES[cod] || cod, n = (porMun[cod]||[]).length;
-      p.addEventListener("mousemove", e => showTip(e, `<b>${esc(nome)}</b>${n} contrato${n===1?"":"s"} vigente${n===1?"":"s"}${n ? "<br>" + [...new Set(porMun[cod].map(c=>c.fornecedor))].map(esc).join(", ") : ""}`));
+      const nc = (porMun[cod]||[]).filter(c => c.tipo_orgao === "Consórcio").length;
+      p.addEventListener("mousemove", e => showTip(e, `<b>${esc(nome)}</b>${n} contrato${n===1?"":"s"} vigente${n===1?"":"s"}${nc ? ` (${nc} de consórcio${nc===1?"":"s"})` : ""}${n ? "<br>" + [...new Set(porMun[cod].map(c=>c.fornecedor))].map(esc).join(", ") : ""}`));
       p.addEventListener("mouseleave", hideTip);
       p.addEventListener("click", () => { SEL = cod; render3(); }); });
   }
@@ -307,12 +316,14 @@ function render3(){
   if (SEL){
     const nome = NOMES[SEL] || (D.contratos.find(c => c.codigo_ibge === SEL) || {}).municipio || SEL;
     const lista = cs.filter(c => c.codigo_ibge === SEL).sort((a,b) => (b.fim_vigencia||"").localeCompare(a.fim_vigencia||""));
+    const nCons = lista.filter(c => vigente(c) && c.tipo_orgao === "Consórcio").length;
     $("#p3t").textContent = nome;
-    $("#p3n").textContent = `${lista.filter(vigente).length} contrato(s) vigente(s) de TI · clique em outro município para trocar`;
-    $("#p3").innerHTML = lista.length ? `<table><thead><tr><th>Fornecedor</th><th>Objeto</th><th class="n">Valor</th><th>Fim da vigência</th></tr></thead><tbody>${
+    $("#p3n").textContent = `${lista.filter(vigente).length} contrato(s) vigente(s) de TI` + (nCons ? ` (${nCons} de consórcios sediados aqui)` : "") +
+      " · passe o mouse no órgão para ver o objeto · clique em outro município para trocar";
+    $("#p3").innerHTML = lista.length ? `<table><thead><tr><th>Fornecedor</th><th>Órgão</th><th class="n">Valor</th><th>Fim da vigência</th><th>Contrato</th></tr></thead><tbody>${
       lista.map(c => { const d = dias(c.fim_vigencia);
         const st = d < 0 ? '<span class="muted">encerrado</span>' : d <= 365 ? `<span class="urg">vence em ${d} dias</span>` : `vence em ${d} dias`;
-        return `<tr><td>${esc(c.fornecedor)}<div class="muted">${esc(c.cnpj)}</div></td><td>${esc(c.objeto)}<div class="muted">${esc(c.categoria)}${c.tipo_orgao && c.tipo_orgao !== "Prefeitura" ? " · " + esc(c.tipo_orgao) + ": " + esc(c.orgao) : ""}</div></td><td class="n">${fBRL(c.valor)}</td><td>${fData(c.fim_vigencia)}<div>${st}</div></td></tr>`; }).join("")
+        return `<tr><td>${esc(c.fornecedor)}<div class="muted">${esc(c.cnpj)}</div></td><td title="${esc(c.objeto)}">${esc(c.orgao)}<div class="muted">${esc(c.tipo_orgao || "")} · ${esc(c.categoria)}</div></td><td class="n">${fBRL(c.valor)}</td><td>${fData(c.fim_vigencia)}<div>${st}</div></td><td>${link(c.link)}</td></tr>`; }).join("")
     }</tbody></table>` : '<div class="empty">Nenhum contrato de TI registrado para este município com os filtros atuais.</div>';
   } else {
     const munis = Object.entries(porMun).map(([cod,l]) => ({cod, nome: NOMES[cod] || l[0].municipio, n: l.length, prox: l.map(c=>c.fim_vigencia).sort()[0]})).sort((a,b) => b.n - a.n || a.nome.localeCompare(b.nome,"pt-BR"));

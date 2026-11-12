@@ -9,17 +9,22 @@ Uso:
   python main.py reclassificar          # refaz a marcação de TI no banco após ajustar os termos no config
   python main.py orgaos                 # carga ampla da lista de órgãos (licitações dos últimos 365 dias)
   python main.py orgaos --csv a.csv     # ou: órgãos tirados de exportações de contratos do portal do PNCP
+  python main.py importar --csv a.csv   # órgãos e contratos de exportações do portal (carga histórica rápida)
+  python main.py tudo --sem-contratos   # coleta só licitações (rápido) e exporta
+  python main.py buscar                 # carga histórica: contratos com "sistema" desde 2021, pela busca do portal
 """
 import argparse
 import json
 import logging
 import sys
+import time
 from datetime import date, timedelta
+from pathlib import Path
 
 import pandas as pd
 
 import config as C
-from src import api, banco, exportacao, ibge, pncp, tratamento
+from src import api, banco, exportacao, ibge, looker, pncp, tratamento
 
 log = logging.getLogger("monitor")
 
@@ -34,7 +39,7 @@ def diagnostico(dias: int) -> None:
     print("\nConfira se os campos lidos em src/pncp.py (_linha_contratacao e _linha_contrato) existem acima.")
 
 
-def coletar(con, dias: int | None) -> None:
+def coletar(con, dias: int | None, com_contratos: bool = True) -> None:
     hoje = date.today()
     ultima = banco.ultima_coleta(con)
     completa = dias is not None or not ultima   # com --dias (ou na primeira vez) tudo é consultado do zero
@@ -75,10 +80,13 @@ def coletar(con, dias: int | None) -> None:
     log.info("Gravadas: %d contratações municipais, %d de TI (de %d baixadas)", n1, n1_ti, len(juntas))
 
     # 2. Contratos
-    if C.CONTRATOS_POR_ORGAO and not banco.ler_controle(con, "carga_orgaos"):
+    if not com_contratos:
+        log.info("Etapa de contratos pulada (--sem-contratos): o painel usa os contratos já no banco.")
+        brutos = pd.DataFrame(columns=pncp.COLUNAS_CONTRATOS)
+    elif C.CONTRATOS_POR_ORGAO and not banco.ler_controle(con, "carga_orgaos"):
         log.warning("A lista de órgãos ainda não teve carga ampla: câmaras, fundos e fundações que só assinam "
                     "contratos de licitações da prefeitura ficam de fora. Rode uma vez: python main.py orgaos")
-    if C.CONTRATOS_POR_ORGAO:
+    if com_contratos and C.CONTRATOS_POR_ORGAO:
         lista = banco.ler(con, "orgaos")
         lista = lista[tratamento.na_esfera(lista) & (lista["uf"] == C.UF)] if not lista.empty else lista
         lista = lista.drop_duplicates("orgao_cnpj").sort_values("orgao")
@@ -95,7 +103,7 @@ def coletar(con, dias: int | None) -> None:
                  len(alvo), len(lista) - len(alvo), C.CONSULTAS_PARALELAS)
         brutos, consultados = pncp.contratos_por_orgao(alvo, hoje)
         banco.marcar_contratos_ate(con, consultados, hoje)
-    else:
+    elif com_contratos:
         brutos = pncp.contratos_nacional(inicio, hoje)
     contratos = tratamento.marcar_ti(tratamento.filtrar_esfera(tratamento.padronizar_municipios(brutos, municipios)))
     n2 = banco.gravar(con, "contratos", contratos)
@@ -107,8 +115,8 @@ def coletar(con, dias: int | None) -> None:
     # falha em contratos de um órgão: só aquele órgão fica pendente (contratos_ate não avança).
     banco.registrar_execucao(con, inicio, inicio if pncp.falhas else hoje, n1_ti, n2_ti, obs[:2000])
     e = api.ESTATISTICAS
-    log.info("Resumo: %d chamadas à API, %d novas tentativas, %.0fs esperando a rede",
-             e["chamadas"], e["novas_tentativas"], e["segundos_em_rede"])
+    log.info("Resumo: %d chamadas à API, %d novas tentativas (%d pedidos do PNCP para desacelerar), %.0fs esperando a rede",
+             e["chamadas"], e["novas_tentativas"], e["desaceleracoes"], e["segundos_em_rede"])
     if pncp.falhas:
         log.warning("%d consulta(s) de contratações falharam. A próxima execução repete o período.", len(pncp.falhas))
     if pncp.orgaos_pendentes:
@@ -125,32 +133,132 @@ CSV_PORTAL = {"CNPJ do Órgão/Entidade": "orgao_cnpj", "Razão Social do Órgã
 def carregar_orgaos(con, dias: int | None, csvs: list[str] | None) -> None:
     """Amplia a lista de órgãos usada na busca de contratos.
 
-    Sem --csv: percorre as licitações publicadas no período (padrão CARGA_ORGAOS_DIAS) e guarda os órgãos e
-    as licitações (com a marcação de TI). Com --csv: lê exportações de contratos do portal do PNCP.
-    Os contratos desses órgãos novos são buscados na próxima `coletar`.
+    Sem --csv: percorre as licitações publicadas no período (padrão CARGA_ORGAOS_DIAS), mês a mês, e guarda
+    os órgãos e as licitações (com a marcação de TI). Cada mês concluído sem falha fica anotado: se a carga
+    for interrompida, rodar de novo continua do mês que faltou.
+    Com --csv: lê exportações "Contratos/Empenhos" do portal do PNCP.
+    Os contratos dos órgãos novos são buscados na próxima `coletar`.
     """
     antes = set(banco.ler(con, "orgaos")["orgao_cnpj"])
     if csvs:
+        faltando = [f for f in csvs if not Path(f).is_file()]
+        if faltando:
+            sys.exit("Arquivo não encontrado: " + "; ".join(faltando) +
+                     "\nPasse o caminho do CSV exportado do portal, entre aspas, por exemplo: "
+                     "python main.py orgaos --csv \"C:\\Users\\voce\\Downloads\\consulta-contratos-empenhos.csv\"")
         partes = [pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str, usecols=list(CSV_PORTAL)).rename(columns=CSV_PORTAL)
                   for f in csvs]
-        orgaos = pd.concat(partes, ignore_index=True)
-    else:
-        hoje = date.today()
-        inicio = hoje - timedelta(days=(dias or C.CARGA_ORGAOS_DIAS) - 1)
-        log.info("Carga de órgãos: licitações publicadas de %s a %s, %d consultas por vez...", inicio, hoje, C.CONSULTAS_PARALELAS)
+        _gravar_orgaos(con, pd.concat(partes, ignore_index=True), antes)
+        return
+    hoje = date.today()
+    inicio = hoje - timedelta(days=(dias or C.CARGA_ORGAOS_DIAS) - 1)
+    meses = list(pncp.janelas(inicio, hoje, 30))
+    feitos = {m for m in meses if banco.ler_controle(con, f"carga_orgaos:{m[0]}:{m[1]}")}
+    log.info("Carga de órgãos: licitações publicadas de %s a %s em %d blocos de até 30 dias (%d já feitos), %d consultas por vez.",
+             inicio, hoje, len(meses), len(feitos), C.CONSULTAS_PARALELAS_LICITACOES)
+    municipios, t0, pendentes = ibge.municipios(), time.monotonic(), 0
+    a_fazer = [m for m in meses if m not in feitos]
+    for n, (a, b) in enumerate(a_fazer, 1):
         pncp.falhas.clear()
-        juntas = tratamento.padronizar_municipios(pncp.contratacoes_publicadas(inicio, hoje), ibge.municipios())
+        juntas = tratamento.padronizar_municipios(pncp.contratacoes_publicadas(a, b), municipios)
         banco.gravar(con, "contratacoes", tratamento.marcar_ti(tratamento.filtrar_esfera(juntas)))
-        orgaos = juntas
+        _gravar_orgaos(con, juntas, antes, silencioso=True)
         if pncp.falhas:
-            log.warning("%d consulta(s) falharam; rode de novo para completar a lista.", len(pncp.falhas))
-    orgaos = orgaos[["orgao_cnpj", "orgao", "esfera", "codigo_ibge", "municipio", "uf"]].dropna(subset=["orgao_cnpj"])
-    orgaos = orgaos[orgaos["uf"] == C.UF].drop_duplicates("orgao_cnpj", keep="last")
-    banco.gravar(con, "orgaos", orgaos)
-    banco.definir_controle(con, "carga_orgaos", date.today().isoformat())
-    novos = orgaos[~orgaos["orgao_cnpj"].isin(antes) & tratamento.na_esfera(orgaos)]
-    log.info("Órgãos: %d lidos, %d novos na lista (municipais e consórcios). Por tipo: %s", len(orgaos), len(novos),
-             novos["orgao"].map(tratamento.tipo_orgao).value_counts().to_dict())
+            pendentes += 1
+            log.warning("Bloco %s a %s: %d consulta(s) falharam; ele será refeito na próxima execução.", a, b, len(pncp.falhas))
+        else:
+            banco.definir_controle(con, f"carga_orgaos:{a}:{b}", hoje.isoformat())
+        restante = (time.monotonic() - t0) / n * (len(a_fazer) - n)
+        log.info("Bloco %d de %d (%s a %s): %d licitações | faltam ~%s", n, len(a_fazer), f"{a:%d/%m/%y}", f"{b:%d/%m/%y}",
+                 len(juntas), pncp._tempo(restante))
+    _gravar_orgaos(con, banco.ler(con, "orgaos").iloc[0:0], antes)  # só o resumo
+    if pendentes:
+        log.warning("%d bloco(s) ficaram incompletos. Rode 'python main.py orgaos' de novo: só eles serão refeitos.", pendentes)
+
+
+def _gravar_orgaos(con, df: pd.DataFrame, antes: set, silencioso: bool = False) -> None:
+    if not df.empty:
+        df = df[["orgao_cnpj", "orgao", "esfera", "codigo_ibge", "municipio", "uf"]].dropna(subset=["orgao_cnpj"])
+        banco.gravar(con, "orgaos", df[df["uf"] == C.UF].drop_duplicates("orgao_cnpj", keep="last"))
+        banco.definir_controle(con, "carga_orgaos", date.today().isoformat())
+    if silencioso:
+        return
+    org = banco.ler(con, "orgaos")
+    novos = org[~org["orgao_cnpj"].isin(antes) & tratamento.na_esfera(org) & (org["uf"] == C.UF)]
+    log.info("Órgãos: %d novos na lista (municipais e consórcios), %d no total. Novos por tipo: %s", len(novos),
+             int((tratamento.na_esfera(org) & (org["uf"] == C.UF)).sum()), novos["orgao"].map(tratamento.tipo_orgao).value_counts().to_dict())
+
+
+def _data_br(s: pd.Series) -> pd.Series:
+    return pd.to_datetime(s, format="%d/%m/%Y", errors="coerce").dt.strftime("%Y-%m-%d")
+
+
+def _valor_br(s: pd.Series) -> pd.Series:
+    """'R$ 40.552,08' -> 40552.08"""
+    return pd.to_numeric(s.str.replace(r"[R$\s.]", "", regex=True).str.replace(",", "."), errors="coerce")
+
+
+def importar(con, csvs: list[str]) -> None:
+    """Importa exportações "Contratos/Empenhos" do portal do PNCP: órgãos e contratos.
+
+    Útil para a carga histórica: o portal exporta milhares de contratos em segundos, enquanto a API exige
+    uma consulta por órgão. Os contratos passam pelos mesmos filtros (esfera, TI) da coleta pela API.
+    """
+    carregar_orgaos(con, None, csvs)
+    df = pd.concat([pd.read_csv(f, sep=";", encoding="utf-8-sig", dtype=str, keep_default_na=False) for f in csvs],
+                   ignore_index=True).drop_duplicates("Id Contrato PNCP")
+    df = df.replace("", None)
+    contratos = pd.DataFrame({
+        "id_pncp": df["Id Contrato PNCP"], "id_compra": df["Id Contratação PNCP"],
+        "orgao_cnpj": df["CNPJ do Órgão/Entidade"], "orgao": df["Razão Social do Órgão/Entidade"],
+        "esfera": df["Código da Esfera do Órgão/Entidade"], "codigo_ibge": df["Código IBGE do Município da Unidade Executora"],
+        "municipio": df["Nome do Município da Unidade Executora"], "uf": df["Sigla UF da Unidade Executora"],
+        "fornecedor_cnpj": df["NI do fornecedor (sem máscara)"], "fornecedor": df["Nome do fornecedor"],
+        "objeto": df["Objeto do Contrato/Empenho"].str.split().str.join(" "), "categoria_processo": None,
+        "valor_inicial": None, "valor_global": _valor_br(df["Valor Global Contratado"]),
+        "data_assinatura": _data_br(df["Data de Assinatura"]), "inicio_vigencia": _data_br(df["Data de Início da Vigência"]),
+        "fim_vigencia": _data_br(df["Data de Fim da Vigência"]), "data_publicacao": _data_br(df["Data de Publicação no PNCP"]),
+        "tipo": df["Nome do Tipo do Contrato/Empenho"], "plataforma": df["Nome da Fonte/Plataforma"],
+    })
+    contratos = contratos[contratos["uf"] == C.UF]
+    contratos = tratamento.marcar_ti(tratamento.filtrar_esfera(tratamento.padronizar_municipios(contratos, ibge.municipios())))
+    n = banco.gravar(con, "contratos", contratos)
+    log.info("Importados: %d contratos municipais de %s, %d de TI, em %d municípios.", n, C.UF,
+             int(contratos["ti"].sum()) if n else 0, contratos["codigo_ibge"].nunique() if n else 0)
+
+
+def buscar(con, termo: str, desde: date) -> None:
+    """Carga histórica pela busca textual do portal do PNCP: contratos com `termo`, trimestre a trimestre.
+
+    Alternativa às exportações manuais em CSV. Cada trimestre concluído (e já encerrado) fica anotado: rodar de
+    novo continua do que faltou. Os contratos passam pelos mesmos filtros (esfera, TI) da coleta pela API.
+    """
+    hoje = date.today()
+    municipios = ibge.municipios()
+    blocos = list(pncp.janelas(desde, hoje, C.BUSCA_JANELA_DIAS))
+    feitos = {b for b in blocos if b[1] < hoje and banco.ler_controle(con, f"busca:{termo}:{b[0]}:{b[1]}")}
+    a_fazer = [b for b in blocos if b not in feitos]
+    log.info("Busca '%s' no portal do PNCP: contratos de %s assinados de %s a %s, %d blocos (%d já feitos).",
+             termo, C.UF, desde, hoje, len(blocos), len(feitos))
+    t0, total_ti, incompletos = time.monotonic(), 0, 0
+    for n, (a, b) in enumerate(a_fazer, 1):
+        brutos, completo = pncp.busca_contratos(termo, a, b)
+        contratos = tratamento.marcar_ti(tratamento.filtrar_esfera(tratamento.padronizar_municipios(
+            brutos[brutos["uf"] == C.UF] if not brutos.empty else brutos, municipios)))
+        banco.gravar(con, "contratos", contratos)
+        _gravar_orgaos(con, contratos, set(), silencioso=True)
+        total_ti += int(contratos["ti"].sum()) if len(contratos) else 0
+        if completo and b < hoje:
+            banco.definir_controle(con, f"busca:{termo}:{a}:{b}", hoje.isoformat())
+        elif not completo:
+            incompletos += 1
+        restante = (time.monotonic() - t0) / n * (len(a_fazer) - n)
+        log.info("Bloco %d de %d (%s a %s): %d contratos, %d municipais, %d de TI | faltam ~%s", n, len(a_fazer),
+                 f"{a:%d/%m/%y}", f"{b:%d/%m/%y}", len(brutos), len(contratos),
+                 int(contratos["ti"].sum()) if len(contratos) else 0, pncp._tempo(restante))
+    log.info("Busca concluída: %d contratos de TI gravados nesta execução.", total_ti)
+    if incompletos:
+        log.warning("%d bloco(s) incompletos; rode 'python main.py buscar' de novo para completar.", incompletos)
 
 
 def reclassificar(con) -> None:
@@ -166,8 +274,8 @@ def reclassificar(con) -> None:
 
 def exportar(con, demo: bool = False) -> None:
     hoje = date.today()
-    contratacoes, contratos = banco.ler(con, "contratacoes"), banco.ler(con, "contratos")
-    contratacoes, contratos = contratacoes[contratacoes["ti"] == 1], contratos[contratos["ti"] == 1]
+    todas, contratos = banco.ler(con, "contratacoes"), banco.ler(con, "contratos")
+    contratacoes, contratos = todas[todas["ti"] == 1], contratos[contratos["ti"] == 1]
     mun = banco.ler(con, "municipios")
     pop = mun[["codigo_ibge", "populacao"]].dropna() if not mun.empty else mun
     tabelas = {
@@ -177,6 +285,8 @@ def exportar(con, demo: bool = False) -> None:
     }
     exportacao.exportar(tabelas, C.SAIDA, hoje, demo)
     log.info("Exportado em %s: %s", C.SAIDA, {k: len(v) for k, v in tabelas.items()})
+    n = looker.exportar(tabelas["oportunidades"], tabelas["movimentacoes"], contratos, mun, todas, C.SAIDA / "looker", hoje)
+    log.info("Tabelas para o Looker Studio em %s: %s", C.SAIDA / "looker", n)
 
 
 def main(argv=None) -> None:
@@ -186,21 +296,31 @@ def main(argv=None) -> None:
                         handlers=[logging.StreamHandler(sys.stdout),
                                   logging.FileHandler(C.ARQUIVO_LOG, mode="w", encoding="utf-8")])
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("comando", choices=["diagnostico", "coletar", "exportar", "tudo", "reclassificar", "orgaos"])
+    p.add_argument("comando", choices=["diagnostico", "coletar", "exportar", "tudo", "reclassificar", "orgaos", "importar", "buscar"])
     p.add_argument("--dias", type=int, help="tamanho do período a coletar (padrão: incremental, ou 30 na primeira vez)")
-    p.add_argument("--csv", nargs="+", help="com 'orgaos': exportações de contratos do portal do PNCP")
+    p.add_argument("--csv", nargs="+", help="com 'orgaos' ou 'importar': exportações de contratos do portal do PNCP")
+    p.add_argument("--termo", default="sistema", help="com 'buscar': palavra-chave da busca no portal (padrão: sistema)")
+    p.add_argument("--desde", default="2021-01-01", help="com 'buscar': data de assinatura inicial (AAAA-MM-DD)")
+    p.add_argument("--sem-contratos", action="store_true",
+                   help="com 'coletar'/'tudo': pula a busca de contratos por órgão (usa os já importados)")
     a = p.parse_args(argv)
     if a.comando == "diagnostico":
         return diagnostico(a.dias or 7)
     con = banco.conectar()
     try:
         if a.comando in ("coletar", "tudo"):
-            coletar(con, a.dias)
+            coletar(con, a.dias, com_contratos=not a.sem_contratos)
+        if a.comando == "buscar":
+            buscar(con, a.termo, date.fromisoformat(a.desde))
+        if a.comando == "importar":
+            if not a.csv:
+                sys.exit("Uso: python main.py importar --csv \"arquivo.csv\" [outros.csv]")
+            importar(con, a.csv)
         if a.comando == "orgaos":
             carregar_orgaos(con, a.dias, a.csv)
         if a.comando == "reclassificar":
             reclassificar(con)
-        if a.comando in ("exportar", "tudo", "reclassificar"):
+        if a.comando in ("exportar", "tudo", "reclassificar", "importar", "buscar"):
             exportar(con)
     finally:
         con.close()

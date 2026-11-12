@@ -20,14 +20,23 @@ def _regex(termos: list[str]) -> re.Pattern:
     return re.compile("|".join(rf"\b{re.escape(sem_acento(t).strip())}" for t in termos))
 
 
-_TI, _EXCLUIR = _regex(C.TERMOS_TI), _regex(C.TERMOS_EXCLUIR)
+_TI, _EXCLUIR, _TI_FORTE = _regex(C.TERMOS_TI), _regex(C.TERMOS_EXCLUIR), _regex(C.TERMOS_TI_FORTES)
 _PROCESSO_TI = _regex(C.CATEGORIAS_PROCESSO_TI)
 _CATEGORIAS = {cat: _regex(termos) for cat, termos in C.CATEGORIAS.items()}
 
 
+_PREFIXO_PLATAFORMA = re.compile(r"^\s*\[[^\]]*\]\s*-?\s*")
+
+
+def texto_objeto(objeto) -> str:
+    """Objeto sem acento e sem o prefixo que algumas plataformas acrescentam ("[Portal de Compras Públicas] - ")."""
+    return _PREFIXO_PLATAFORMA.sub("", sem_acento(objeto))
+
+
 def eh_ti(objeto) -> bool:
-    t = sem_acento(objeto)
-    return bool(_TI.search(t)) and not _EXCLUIR.search(t)
+    """TI se tiver termo forte, ou termo de TI sem termo de exclusão."""
+    t = texto_objeto(objeto)
+    return bool(_TI_FORTE.search(t)) or (bool(_TI.search(t)) and not _EXCLUIR.search(t))
 
 
 def categoria(objeto) -> str:
@@ -48,7 +57,7 @@ def marcar_ti(df: pd.DataFrame) -> pd.DataFrame:
     ti = df["objeto"].map(eh_ti)
     if "categoria_processo" in df.columns:
         por_processo = df["categoria_processo"].map(lambda c: bool(_PROCESSO_TI.search(sem_acento(c))))
-        ti = ti | (por_processo & ~df["objeto"].map(lambda o: bool(_EXCLUIR.search(sem_acento(o)))))
+        ti = ti | (por_processo & ~df["objeto"].map(lambda o: bool(_EXCLUIR.search(texto_objeto(o)))))
     out = df.copy()
     out["ti"] = ti.astype(int)
     out["categoria"] = out["objeto"].map(categoria)
@@ -91,7 +100,7 @@ def na_esfera(df: pd.DataFrame, esferas=C.ESFERAS) -> pd.Series:
         return pd.Series(True, index=df.index)
     ok = df["esfera"].isin(esferas)
     if C.INCLUIR_CONSORCIOS and "orgao" in df.columns:
-        ok |= (df["esfera"] == "N") & df["orgao"].map(lambda o: "consorcio" in sem_acento(o))
+        ok |= (df["esfera"] == "N") & df["orgao"].map(lambda o: bool(re.search(r"consorcio|intermunicipal", sem_acento(o))))
     return ok
 
 

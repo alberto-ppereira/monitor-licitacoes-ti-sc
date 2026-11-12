@@ -79,7 +79,7 @@ def _linha_contratacao(it: dict) -> dict:
         "data_abertura_proposta": _data(it.get("dataAberturaProposta")),
         "data_encerramento_proposta": _data(it.get("dataEncerramentoProposta")),
         "link": it.get("linkSistemaOrigem"),
-        # sistema que publicou no PNCP (ex.: "IPM Sistemas", "Betha Sistemas"): em geral é o ERP do órgão
+        # sistema que publicou no PNCP (o software de gestão usado pelo órgão): em geral é o ERP do órgão
         "plataforma": it.get("usuarioNome"),
     }
 
@@ -136,7 +136,7 @@ def _coletar(url: str, params: dict, conversor, descricao: str, registro: list |
 def _em_paralelo(tarefas: list[tuple[str, dict, str]]) -> list[dict]:
     """Executa consultas de contratações (url, params, descrição) em paralelo, na ordem em que terminarem."""
     linhas = []
-    with ThreadPoolExecutor(max_workers=max(1, C.CONSULTAS_PARALELAS)) as ex:
+    with ThreadPoolExecutor(max_workers=max(1, C.CONSULTAS_PARALELAS_LICITACOES)) as ex:
         futuros = {ex.submit(_coletar, url, params, _linha_contratacao, desc): desc for url, params, desc in tarefas}
         for futuro in as_completed(futuros):
             novas = futuro.result()
@@ -233,6 +233,76 @@ def contratos_nacional(inicio: date, fim: date, uf: str = C.UF) -> pd.DataFrame:
         linhas += novas
         log.info("  contratos %s a %s (%s): %d", f"{a:%d/%m}", f"{b:%d/%m}", uf, len(novas))
     return _tabela(linhas, COLUNAS_CONTRATOS)
+
+
+def _linha_busca(it: dict) -> dict:
+    """Item da busca textual do portal -> mesma linha plana de `_linha_contrato`."""
+    return {
+        "id_pncp": it.get("numero_controle_pncp"),
+        "id_compra": it.get("numero_contratacao"),
+        "orgao_cnpj": it.get("orgao_cnpj"),
+        "orgao": it.get("orgao_nome"),
+        "esfera": it.get("esfera_id"),
+        "codigo_ibge": str(it.get("codigo_ibge") or "")[:7] or None,
+        "municipio": it.get("municipio_nome"),
+        "uf": it.get("uf"),
+        "fornecedor_cnpj": it.get("fornecedor_ni"),
+        "fornecedor": it.get("fornecedor_nome"),
+        "objeto": " ".join(str(it.get("description") or "").split()),
+        "categoria_processo": None,
+        "valor_inicial": None,
+        "valor_global": it.get("valor_global"),
+        "data_assinatura": _data(it.get("data_assinatura")),
+        "inicio_vigencia": _data(it.get("data_inicio_vigencia")),
+        "fim_vigencia": _data(it.get("data_fim_vigencia")),
+        "data_publicacao": _data(it.get("data_publicacao_pncp")),
+        "tipo": it.get("tipo_contrato_nome"),
+        "plataforma": it.get("usuario_nome"),
+    }
+
+
+def busca_contratos(termo: str, inicio: date, fim: date, uf: str = C.UF) -> tuple[pd.DataFrame, bool]:
+    """Contratos cujo texto contém `termo`, assinados entre `inicio` e `fim`, pela busca do portal.
+
+    Devolve (contratos, completo). Se a janela passar do limite de resultados da busca, é dividida ao meio.
+    Contratos cancelados ficam de fora.
+    """
+    from src.api import get_json
+    base = {"q": termo, "tipos_documento": "contrato", "ordenacao": "data", "status": "todos", "ufs": uf,
+            "tam_pagina": C.BUSCA_TAMANHO_PAGINA, "data_assinatura_inicio": inicio.isoformat(),
+            "data_assinatura_fim": fim.isoformat()}
+    rotulo = f"busca '{termo}' {inicio:%d/%m/%y} a {fim:%d/%m/%y}"
+    try:
+        primeira = get_json(C.PNCP_BUSCA, {**base, "pagina": 1}) or {}
+    except (requests.RequestException, ValueError) as e:
+        log.error("Falhou %s (%s).", rotulo, e)
+        return pd.DataFrame(columns=COLUNAS_CONTRATOS), False
+    total = int(primeira.get("total") or 0)
+    if total > C.BUSCA_MAX_RESULTADOS and (fim - inicio).days > 1:
+        meio = inicio + timedelta(days=(fim - inicio).days // 2)
+        log.info("   %s: %d resultados, acima do limite; dividindo o período.", rotulo, total)
+        a, ok_a = busca_contratos(termo, inicio, meio, uf)
+        b, ok_b = busca_contratos(termo, meio + timedelta(days=1), fim, uf)
+        return pd.concat([a, b], ignore_index=True), ok_a and ok_b
+    paginas = -(-total // C.BUSCA_TAMANHO_PAGINA)
+    itens, completo = list(primeira.get("items") or []), True
+    log.info("   %s: página 1 de %d (%d resultados)", rotulo, max(paginas, 1), total)
+    for pagina in range(2, paginas + 1):
+        try:
+            corpo = get_json(C.PNCP_BUSCA, {**base, "pagina": pagina}) or {}
+        except (requests.RequestException, ValueError) as e:
+            # segue para as próximas páginas; o período fica marcado como incompleto e é refeito depois
+            log.error("Falhou %s, página %d (%s). Seguindo; o período será refeito na próxima execução.", rotulo, pagina, e)
+            completo = False
+            continue
+        novos = corpo.get("items") or []
+        if not novos:
+            break
+        itens += novos
+        if C.LOG_POR_PAGINA:
+            log.info("   %s: página %d de %d", rotulo, pagina, paginas)
+    linhas = [_linha_busca(it) for it in itens if not it.get("cancelado") and it.get("numero_controle_pncp")]
+    return _tabela(linhas, COLUNAS_CONTRATOS), completo
 
 
 def amostra_bruta(inicio: date, fim: date) -> dict:

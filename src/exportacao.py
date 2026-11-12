@@ -31,7 +31,12 @@ def oportunidades(contratacoes: pd.DataFrame, populacao: pd.DataFrame, hoje: dat
     df["data_abertura"] = df["data_encerramento_proposta"].fillna(df["data_abertura_proposta"])
     df = df[dias_ate(df["data_abertura"], hoje) >= 0].copy()
     df["nota"] = pontuar(df, populacao, hoje)
-    return df.sort_values("nota", ascending=False)[COLS_OPORTUNIDADES].reset_index(drop=True)
+    # a mesma licitação às vezes é publicada duas vezes (sistema do órgão e portal de compras), com ids
+    # diferentes: mesmo município, mesma data de disputa e mesmo valor (arredondado) contam como uma só
+    df = df.sort_values("nota", ascending=False)
+    chave = df[["municipio", "data_abertura"]].assign(v=df["valor_estimado"].round(0))
+    df = df[~chave.duplicated()]
+    return df[COLS_OPORTUNIDADES].reset_index(drop=True)
 
 
 def movimentacoes(contratacoes: pd.DataFrame, contratos: pd.DataFrame, hoje: date,
@@ -57,9 +62,18 @@ def movimentacoes(contratacoes: pd.DataFrame, contratos: pd.DataFrame, hoje: dat
     return pd.concat(partes, ignore_index=True).sort_values("data", ascending=False)[COLS_MOVIMENTACOES]
 
 
+def nome_fornecedor_padrao(contratos: pd.DataFrame) -> pd.Series:
+    """Um nome por fornecedor (raiz do CNPJ): 'Empresa X Ltda' e 'EMPRESA X LTDA' viram o nome mais frequente."""
+    raiz = contratos["fornecedor_cnpj"].fillna("").str[:8]
+    nome = contratos["fornecedor"].fillna("").str.strip().str.upper()
+    mais_comum = nome.groupby(raiz).agg(lambda s: s.mode().iloc[0] if len(s.mode()) else "")
+    return raiz.map(mais_comum).where(raiz != "", nome)
+
+
 def contratos_ti(contratos: pd.DataFrame) -> pd.DataFrame:
     if contratos.empty:
         return pd.DataFrame(columns=COLS_CONTRATOS)
+    contratos = contratos.assign(fornecedor=nome_fornecedor_padrao(contratos))
     return contratos.rename(columns={"fornecedor_cnpj": "cnpj", "valor_global": "valor"}) \
         .assign(link=contratos["id_pncp"].map(link_contrato), tipo_orgao=contratos["orgao"].map(tipo_orgao))[COLS_CONTRATOS].sort_values(["municipio", "fim_vigencia"]).reset_index(drop=True)
 

@@ -16,16 +16,16 @@ from src import api, banco, ibge
 
 HOJE = date.today()
 d = lambda n: (HOJE + timedelta(days=n)).isoformat()
-IPM, IPM_FILIAL, OUTRA = "01258027000141", "01258027000303", "99888777000166"
+FORN, FORN_FILIAL, OUTRA = "12345678000141", "12345678000303", "99888777000166"
 ORGAOS = [("83169623000110", "MUNICIPIO DE JOINVILLE", "Joinville", "4209102"),
           ("83108357000115", "MUNICIPIO DE BLUMENAU", "Blumenau", "4202404"),
           ("11222333000144", "CAMARA MUNICIPAL DE LAGES", "Lages", "4209300"),
           ("83021808000182", "MUNICIPIO DE CHAPECO", "Chapecó", "4204202")]
 CONTRATOS = {  # CNPJ do órgão -> (contrato, dias desde a publicação)
-    "83169623000110": [("Locação de sistema de gestão pública integrada", IPM, "IPM SISTEMAS LTDA", -300, 200),
+    "83169623000110": [("Locação de sistema de gestão pública integrada", FORN, "SOFTWARE PUBLICO A LTDA", -300, 200),
                        ("Aquisição de pneus", OUTRA, "PNEUS SA", -20, 100)],
     "83108357000115": [("Licença de uso de software de gestão tributária", OUTRA, "OUTRA SOFTWARE LTDA", -100, 300)],
-    "11222333000144": [("Sistema de gestão legislativa", IPM_FILIAL, "IPM SISTEMAS LTDA", -700, -30)],  # filial, encerrado
+    "11222333000144": [("Sistema de gestão legislativa", FORN_FILIAL, "SOFTWARE PUBLICO A LTDA", -700, -30)],  # filial, encerrado
 }
 FALHAR = {"83021808000182"}   # Chapecó: PNCP fora do ar na primeira rodada
 CHAMADAS = []
@@ -84,27 +84,27 @@ def main():
         F.janela_atual = 365
         con = F.abrir_cache()
         desde = HOJE - timedelta(days=800)
-        F.coletar(con, desde, ["01258027"], False, None)
+        F.coletar(con, desde, ["12345678"], False, None)
         checar("API recusou 365 dias: o período foi dividido e a janela diminuiu", F.janela_atual <= 200)
         ct = banco.ler(con, "contratos")
-        checar("contratos da IPM encontrados, inclusive de filial (raiz do CNPJ)",
-               set(ct.loc[ct["fornecedor_cnpj"].str.startswith("01258027"), "orgao_cnpj"]) == {"83169623000110", "11222333000144"})
+        checar("contratos do fornecedor encontrados, inclusive de filial (raiz do CNPJ)",
+               set(ct.loc[ct["fornecedor_cnpj"].str.startswith("12345678"), "orgao_cnpj"]) == {"83169623000110", "11222333000144"})
         checar("cache guarda os outros contratos de TI e descarta os que não são de TI (pneus)",
                "OUTRA SOFTWARE LTDA" in set(ct["fornecedor"]) and "PNEUS SA" not in set(ct["fornecedor"]))
         feitos = {r[0] for r in con.execute("SELECT DISTINCT orgao_cnpj FROM consultas")}
         checar("órgão que falhou não fica marcado como consultado (Chapecó)", "83021808000182" not in feitos and len(feitos) == 3)
         CHAMADAS.clear()
         FALHAR.clear()
-        F.coletar(con, desde, ["01258027"], False, None)
+        F.coletar(con, desde, ["12345678"], False, None)
         checar("segunda execução consulta só o que faltava (Chapecó)", {c["cnpjOrgao"] for c in CHAMADAS} == {"83021808000182"})
-        F.exportar(con, ["01258027"], "IPM Sistemas", desde)
+        F.exportar(con, ["12345678"], "Sistema A", desde)
         js = (C.DASHBOARD / "dados_fornecedor.js").read_text(encoding="utf-8")
         dados = json.loads(js[js.index("{"):js.rindex("}") + 1])
         vig = {c["municipio"]: c["vigente"] for c in dados["contratos"]}
         checar("exportação: Joinville vigente, Lages encerrado", vig == {"Joinville": True, "Lages": False})
         checar("exportação: Blumenau aparece como outro fornecedor de TI", [o["municipio"] for o in dados["outros"]] == ["Blumenau"])
         checar("CSVs gerados", all((C.SAIDA / f).exists() for f in
-               ["fornecedor_ipm_sistemas_contratos.csv", "fornecedor_ipm_sistemas_municipios.csv"]))
+               ["fornecedor_sistema_a_contratos.csv", "fornecedor_sistema_a_municipios.csv"]))
         con.close()
     print(f"\n{checar.falhas} falha(s).")
     sys.exit(1 if checar.falhas else 0)

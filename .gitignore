@@ -3,6 +3,7 @@ data/
 saida/
 dashboard/dados.js
 dashboard/dados_fornecedor.js
+Downloads PNCP/
 *.log
 
 # ambiente Python

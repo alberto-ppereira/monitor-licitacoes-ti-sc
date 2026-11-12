@@ -1,4 +1,4 @@
-"""Onde um fornecedor (por padrão, a IPM Sistemas) tem contratos com órgãos municipais de SC.
+"""Onde um fornecedor de software tem contratos com órgãos municipais de SC.
 
 A API de consulta do PNCP não filtra contratos por fornecedor. Por isso o script percorre o histórico de
 contratos de cada órgão municipal de SC (lista que vem do monitor.db, montada pela coleta principal) e
@@ -9,13 +9,12 @@ de TI, e quais períodos de cada órgão já foram consultados: interromper (Ctr
 de onde parou. No fim, gera saida/fornecedor_*.csv e o mapa dashboard/mapa_fornecedor.html.
 
 Uso:
-  python fornecedor_no_mapa.py                       # IPM Sistemas, contratos desde FORNECEDOR_DESDE
+  python fornecedor_no_mapa.py --cnpj 12345678 --nome "Fornecedor X"       # contratos desde FORNECEDOR_DESDE
   python fornecedor_no_mapa.py --limite 20           # teste rápido com os 20 primeiros órgãos
   python fornecedor_no_mapa.py --so-prefeituras      # só os órgãos "Município de ..." (mais rápido)
   python fornecedor_no_mapa.py --desde 2021-04-01    # histórico maior (mais demorado)
   python fornecedor_no_mapa.py --exportar            # só refaz CSV e mapa com o que já está no cache
-  python fornecedor_no_mapa.py --cnpj 00456865 --nome "Betha Sistemas"      # outro fornecedor
-  python fornecedor_no_mapa.py --cnpj 01258027 44104389 --nome "Grupo IPM"  # grupo econômico (várias raízes)
+  python fornecedor_no_mapa.py --cnpj 12345678 87654321 --nome "Grupo X"    # grupo econômico (várias raízes)
 
 Limitação importante: o PNCP só tem o que os órgãos publicaram nele (obrigatório com a Lei 14.133;
 muitos municípios começaram em 2023/2024). Contratos antigos, assinados pela Lei 8.666 e mantidos por
@@ -235,6 +234,8 @@ def main(argv=None) -> None:
     p.add_argument("--exportar", action="store_true", help="não consulta a API; só refaz CSV e mapa a partir do cache")
     a = p.parse_args(argv)
     raizes, desde = [re.sub(r"\D", "", c)[:8] for c in a.cnpj], date.fromisoformat(a.desde)
+    if not raizes:
+        sys.exit("Informe o fornecedor: --cnpj <8 primeiros dígitos do CNPJ> --nome \"Nome\" (ou FORNECEDOR_CNPJ_RAIZES no config).")
     con = abrir_cache()
     try:
         if not a.exportar:

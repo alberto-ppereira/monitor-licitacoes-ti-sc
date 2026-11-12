@@ -3,14 +3,15 @@
 Coleta, integra e exporta dados públicos para mapear oportunidades de venda de sistemas de gestão
 para prefeituras de Santa Catarina: licitações publicadas e em aberto, contratos vigentes e seus
 fornecedores, com uma nota de prioridade por oportunidade. Inclui um script separado que mostra onde
-um fornecedor (por padrão, a IPM Sistemas) tem contratos no estado.
+um fornecedor de software tem contratos no estado.
 
 ## Fontes
 
 | Fonte | O que vem dela |
 |---|---|
 | PNCP, API de consulta (`/v1/contratacoes/publicacao`, `/v1/contratacoes/proposta`, `/v1/contratos`) | Licitações, prazos, valores estimados, contratos, fornecedores, vigências e a plataforma que publicou |
-| PNCP, exportação "Contratos/Empenhos" do portal (CSV, opcional) | Órgãos que assinam contratos, para completar a lista de órgãos |
+| PNCP, busca textual do portal (`/api/search/`, não documentada) | Carga histórica de contratos por palavra-chave, sem limite de exportação (`python main.py buscar`) |
+| PNCP, exportação "Contratos/Empenhos" do portal (CSV) | Carga histórica de contratos e dos órgãos que os assinam (milhares de contratos em segundos; a API exige uma consulta por órgão) |
 | IBGE, API de localidades | Lista oficial de municípios e códigos |
 | IBGE, API de agregados (SIDRA 6579) | População estimada, usada na pontuação |
 | IBGE, API de malhas | Desenho dos municípios no mapa (carregado pelo navegador) |
@@ -21,19 +22,20 @@ um fornecedor (por padrão, a IPM Sistemas) tem contratos no estado.
 
 ## Regras de negócio
 
-Conferidas contra exportações do portal do PNCP com 207 contratos da IPM e 88 da Betha.
+Conferidas contra exportações do portal do PNCP com contratos de dois grandes fornecedores de ERP municipal em SC (207 e 88 contratos).
 
 | Regra | Onde | Por quê |
 |---|---|---|
-| Só órgãos municipais de SC, mais consórcios intermunicipais | `ESFERAS`, `INCLUIR_CONSORCIOS` | O PNCP marca consórcios com esfera "N"; eles compram para os municípios (ex.: CINCATARINA) |
-| É TI o objeto com termo de TI (sem acento, início de palavra) ou contrato com categoria "Informática (TIC)" | `TERMOS_TI`, `CATEGORIAS_PROCESSO_TI` | Termos conferidos no texto real dos contratos: "sistema web integrado", "sistema de informática", "SIAFIC", "Atende.Net"... (206 de 207 da IPM e 88 de 88 da Betha) |
+| Só órgãos municipais de SC, mais consórcios e agências intermunicipais | `ESFERAS`, `INCLUIR_CONSORCIOS` | O PNCP marca consórcios e agências intermunicipais com esfera "N"; eles compram para os municípios |
+| É TI o objeto com termo de TI (sem acento, início de palavra) ou contrato com categoria "Informática (TIC)" | `TERMOS_TI`, `CATEGORIAS_PROCESSO_TI` | Termos conferidos no texto real dos contratos: "sistema web integrado", "sistema de informática", "SIAFIC", "Atende.Net"... (206 de 207 e 88 de 88 nos dois fornecedores conferidos) |
 | Exclusões por frase, não por palavra solta | `TERMOS_EXCLUIR` | "mobiliário" sozinho derrubava "cadastro mobiliário" (ISS), presente em quase todo ERP |
+| Termos fortes vencem exclusões | `TERMOS_TI_FORTES` | "licença de uso", "sistema de informática", "integrado de gestão"... são software mesmo com "bens móveis", "digitalização" ou "controle de acesso" no texto (+64 contratos de TI em 3.800, nenhum perdido) |
 | O banco guarda tudo, com a marcação `ti` | coluna `ti` | Ajustar os termos e rodar `reclassificar` corrige sem baixar de novo |
-| Lista ampla de órgãos | `python main.py orgaos` | Câmaras, fundos e fundações assinam contratos de licitações "multientidade" da prefeitura sem publicar licitação própria; só 55% dos órgãos com contrato da IPM estavam na lista montada pelas licitações |
+| Lista ampla de órgãos | `python main.py orgaos` | Câmaras, fundos e fundações assinam contratos de licitações "multientidade" da prefeitura sem publicar licitação própria; só 55% dos órgãos com contrato de um grande fornecedor estavam na lista montada pelas licitações |
 | Licitação revogada, anulada, suspensa, deserta ou fracassada não é oportunidade | `SITUACOES_FORA` | Continuam no banco, saem da aba de oportunidades |
-| Tipo de órgão pelo nome (prefeitura, câmara, fundo, fundação, autarquia, consórcio) | `tratamento.tipo_orgao` | Contratos de consórcio ficam no município sede: aparecem na lista, mas não pintam o mapa |
-| Plataforma que publicou no PNCP | coluna `plataforma` | Em geral é o ERP do órgão: 117 de 123 contratos da IPM em SC foram publicados pela plataforma "IPM Sistemas", 84 de 88 da Betha pela "Betha Sistemas" |
-| Fornecedor pela raiz do CNPJ (8 dígitos) | `FORNECEDOR_CNPJ_RAIZES` | Inclui filiais; várias raízes cobrem o grupo econômico (ex.: IPM Fintech) |
+| Tipo de órgão pelo nome (prefeitura, câmara, fundo, fundação, autarquia, consórcio) | `tratamento.tipo_orgao` | Contratos de consórcio contam no município sede (onde o PNCP os registra) e aparecem marcados como consórcio |
+| Plataforma que publicou no PNCP | coluna `plataforma` | Em geral é o ERP do órgão: 117 de 123 contratos de um fornecedor foram publicados pela plataforma do próprio fornecedor; no outro, 84 de 88 |
+| Fornecedor pela raiz do CNPJ (8 dígitos) | `FORNECEDOR_CNPJ_RAIZES` | Inclui filiais; várias raízes cobrem o grupo econômico |
 
 ## Robustez da coleta
 
@@ -52,8 +54,11 @@ Requer Python 3.11 ou mais recente.
 pip install -r requirements.txt
 python -m tests.verificacoes        # verificações offline (APIs simuladas)
 python main.py diagnostico          # mostra um registro bruto de cada endpoint
-python main.py orgaos               # uma vez: lista ampla de órgãos (licitações dos últimos 365 dias)
-python main.py orgaos --csv contratos-ipm.csv contratos-betha.csv   # opcional: órgãos das exportações do portal
+python main.py importar --csv "Downloads PNCP\contratos.csv"   # carga histórica rápida: órgãos e contratos exportados do portal
+python main.py tudo --dias 7 --sem-contratos                   # licitações da última semana (minutos) e exporta
+python main.py buscar                                          # carga histórica: contratos com "sistema" desde 2021 pela busca do portal
+python main.py orgaos               # opcional: lista ampla de órgãos (licitações dos últimos 365 dias; demorado)
+python main.py orgaos --csv exportacao1.csv exportacao2.csv   # opcional: órgãos das exportações do portal
 python main.py tudo --dias 30       # primeira coleta: últimos 30 dias, e exporta
 python main.py tudo                 # nas próximas vezes: incremental
 python main.py reclassificar        # depois de ajustar os termos de TI no config
@@ -65,6 +70,21 @@ Saídas em `saida/`: `oportunidades.csv`, `movimentacoes.csv`, `contratos.csv`,
 
 Se a API mudar algum nome de campo, o ajuste é feito só em `src/pncp.py` (`_linha_contratacao` e
 `_linha_contrato`); o `diagnostico` mostra os campos atuais.
+
+### Tabelas para o Looker Studio
+
+A cada exportação, `saida/looker/` recebe cinco CSVs (UTF-8, vírgula, ponto decimal, datas AAAA-MM-DD), um por fonte de dados:
+
+| Arquivo | Uma linha por | Destaques |
+|---|---|---|
+| `oportunidades.csv` | licitação de TI aberta | `nota`, `dias_ate_disputa`, `faixa_prazo`, `tipo_orgao`, `plataforma`, `link` |
+| `movimentacoes.csv` | evento dos últimos dias | `data`, `tipo` (licitação publicada / contrato assinado) |
+| `contratos.csv` | contrato de TI | `situacao` (vigente/encerrado), `dias_para_vencer`, `faixa_vencimento`, `fornecedor_cnpj_raiz`, `ano_assinatura` |
+| `municipios.csv` | município de SC (295) | `populacao`, `contratos_vigentes`, `fornecedor_principal`, `proximo_vencimento`, `plataforma_principal`, `situacao_ti` |
+| `fornecedores.csv` | fornecedor | `municipios_vigentes`, `contratos_vigentes`, `valor_vigente` |
+
+Todas têm a coluna `local` ("Município, SC, Brasil"): no Looker, defina o tipo como **Geográfico → Cidade** para
+o mapa. Defina `codigo_ibge` e os CNPJs como **Texto**.
 
 ### Execução diária no Windows
 
@@ -78,9 +98,8 @@ cada órgão da lista e separa os do fornecedor pela raiz do CNPJ.
 
 ```bash
 python fornecedor_no_mapa.py --limite 20                         # teste rápido com 20 órgãos
-python fornecedor_no_mapa.py                                     # IPM Sistemas (demorado na primeira vez; pode interromper e continuar)
-python fornecedor_no_mapa.py --cnpj 00456865 --nome "Betha Sistemas"
-python fornecedor_no_mapa.py --cnpj 01258027 44104389 --nome "Grupo IPM"
+python fornecedor_no_mapa.py --cnpj 12345678 --nome "Fornecedor X"       # demorado na primeira vez; pode interromper e continuar
+python fornecedor_no_mapa.py --cnpj 12345678 87654321 --nome "Grupo X"    # grupo econômico (várias raízes)
 python fornecedor_no_mapa.py --exportar                          # só refaz o mapa com o que já foi baixado
 python -m tests.verificacoes_fornecedor
 ```
