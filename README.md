@@ -34,6 +34,7 @@ Conferidas contra exportações do portal do PNCP com contratos de dois grandes 
 | Lista ampla de órgãos | `python main.py orgaos` | Câmaras, fundos e fundações assinam contratos de licitações "multientidade" da prefeitura sem publicar licitação própria; só 55% dos órgãos com contrato de um grande fornecedor estavam na lista montada pelas licitações |
 | Licitação revogada, anulada, suspensa, deserta ou fracassada não é oportunidade | `SITUACOES_FORA` | Continuam no banco, saem da aba de oportunidades |
 | Tipo de órgão pelo nome (prefeitura, câmara, fundo, fundação, autarquia, consórcio) | `tratamento.tipo_orgao` | Contratos de consórcio contam no município sede (onde o PNCP os registra) e aparecem marcados como consórcio |
+| Vigência prorrogada por termo aditivo | `python main.py aditivos` | Software é serviço contínuo, renovado ano a ano por aditivo; a busca e a API de consulta só trazem a vigência original (ex.: contratos vencidos em 03/2026 e prorrogados até 03/2027). Rescisão encerra o contrato na data do termo |
 | Plataforma que publicou no PNCP | coluna `plataforma` | Em geral é o ERP do órgão: 117 de 123 contratos de um fornecedor foram publicados pela plataforma do próprio fornecedor; no outro, 84 de 88 |
 | Fornecedor pela raiz do CNPJ (8 dígitos) | `FORNECEDOR_CNPJ_RAIZES` | Inclui filiais; várias raízes cobrem o grupo econômico |
 
@@ -61,6 +62,7 @@ python main.py orgaos               # opcional: lista ampla de órgãos (licita�
 python main.py orgaos --csv exportacao1.csv exportacao2.csv   # opcional: órgãos das exportações do portal
 python main.py tudo --dias 30       # primeira coleta: últimos 30 dias, e exporta
 python main.py tudo                 # nas próximas vezes: incremental
+python main.py aditivos             # termos aditivos: vigência prorrogada dos contratos de TI vencidos ou vencendo
 python main.py reclassificar        # depois de ajustar os termos de TI no config
 ```
 
@@ -128,6 +130,6 @@ O cache fica em `data/historico_contratos.db`.
 ## Limitações e próximos passos
 
 - Só aparece o que os órgãos publicaram no PNCP (obrigatório com a Lei 14.133; muitos municípios começaram em 2023/2024). Contratos antigos mantidos por aditivo podem faltar.
-- A vigência é a do registro do contrato: prorrogações por termo aditivo podem não estar refletidas. A API de consulta não traz aditivos em lote.
+- A vigência considera os termos aditivos de prorrogação (`python main.py aditivos`), consultados um contrato por vez na API de integração do PNCP. Contratos ainda não consultados usam a vigência do registro original.
 - O filtro por termos ainda tem falsos positivos em contratos mistos (ex.: serviço de medicina do trabalho que inclui um sistema). Revisar amostras e ajustar o config.
 - Próximos passos: mapa de "ERP por município" a partir da coluna `plataforma`; alerta para contratações emergenciais de sistema de gestão (sinal de troca de fornecedor); Planos de Contratações Anuais (PNCP); diários oficiais (Querido Diário); exportação para CRM.

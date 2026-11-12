@@ -15,6 +15,7 @@ PNCP_CONSULTA = "https://pncp.gov.br/api/consulta"
 # Busca textual do portal do PNCP (a mesma da tela de pesquisa). Não faz parte da API documentada:
 # endereço e campos podem mudar. Usada só pelo comando `buscar` (carga histórica por palavra-chave).
 PNCP_BUSCA = "https://pncp.gov.br/api/search/"
+PNCP_INTEGRACAO = "https://pncp.gov.br/api/pncp"   # API de integração: termos aditivos de cada contrato
 BUSCA_TAMANHO_PAGINA = 100
 BUSCA_MAX_RESULTADOS = 10000   # limite típico de paginação da busca; janelas maiores são divididas
 BUSCA_JANELA_DIAS = 92         # período de assinatura por consulta (um trimestre)
@@ -149,3 +150,11 @@ FORNECEDOR_NOME = "Fornecedor monitorado"
 FORNECEDOR_DESDE = "2023-01-01"     # início do histórico consultado
 JANELA_HISTORICO_DIAS = 365         # período por consulta; se a API recusar, o script divide sozinho
 BANCO_HISTORICO = RAIZ / "data" / "historico_contratos.db"
+
+
+# --- Termos aditivos (prorrogação de vigência) ---
+# A vigência que a busca e a API de consulta devolvem é a do contrato original; a prorrogação fica nos termos
+# aditivos, consultados um contrato por vez (python main.py aditivos).
+ADITIVOS_VENCIDOS_HA_DIAS = 1095   # consulta contratos de TI vencidos há até 3 anos...
+ADITIVOS_VENCENDO_EM_DIAS = 90     # ...e os que vencem nos próximos 90 dias
+ADITIVOS_REVISAR_DIAS = 30         # um contrato já consultado só é consultado de novo depois desse prazo

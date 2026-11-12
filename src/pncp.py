@@ -22,7 +22,7 @@ import pandas as pd
 import requests
 
 import config as C
-from src.api import paginar
+from src.api import get_json, paginar
 
 log = logging.getLogger(__name__)
 
@@ -314,3 +314,53 @@ def amostra_bruta(inicio: date, fim: date) -> dict:
     con = get_json(f"{C.PNCP_CONSULTA}/v1/contratos", {**base, "tamanhoPagina": 10})
     pegar = lambda corpo: (corpo or {}).get("data", [None])[0] if (corpo or {}).get("data") else None
     return {"contratacoes": pegar(pub), "contratos": pegar(con)}
+
+
+def _partes_contrato(id_pncp) -> tuple[str, str, int] | None:
+    m = re.match(r"(\d{14})-2-(\d+)/(\d{4})", str(id_pncp or ""))
+    return (m[1], m[3], int(m[2])) if m else None
+
+
+def termos_do_contrato(id_pncp: str) -> dict:
+    """Consulta os termos (aditivos, apostilamentos, rescisão) de um contrato na API de integração do PNCP.
+
+    Devolve a maior data de fim de vigência dada por um termo, o total acrescido em valor, o número de
+    termos e se houve rescisão. Um contrato sem termos devolve termos = 0.
+    """
+    partes = _partes_contrato(id_pncp)
+    vazio = {"id_pncp": id_pncp, "fim_vigencia_aditivo": None, "valor_aditivos": None, "termos": 0, "data_rescisao": None}
+    if not partes:
+        return vazio
+    cnpj, ano, seq = partes
+    try:
+        termos = get_json(f"{C.PNCP_INTEGRACAO}/v1/orgaos/{cnpj}/contratos/{ano}/{seq}/termos") or []
+    except requests.HTTPError as e:
+        if getattr(e.response, "status_code", None) == 404:
+            return vazio
+        raise
+    fins = [_data(t.get("dataVigenciaFim")) for t in termos if t.get("dataVigenciaFim")]
+    acrescido = sum(float(t.get("valorAcrescido") or 0) for t in termos)
+    rescisoes = [_data(t.get("dataAssinatura")) for t in termos
+                 if "resc" in str(t.get("tipoTermoContratoNome") or "").lower() and t.get("dataAssinatura")]
+    return {"id_pncp": id_pncp, "fim_vigencia_aditivo": max(fins) if fins else None,
+            "valor_aditivos": acrescido or None, "termos": len(termos),
+            "data_rescisao": min(rescisoes) if rescisoes else None}
+
+
+def termos_em_lote(ids: list[str]) -> tuple[pd.DataFrame, list[str]]:
+    """Consulta os termos de vários contratos em paralelo, com o mesmo controle de ritmo das outras etapas."""
+    linhas, falhas, t0 = [], [], time.monotonic()
+    with ThreadPoolExecutor(max_workers=C.CONSULTAS_PARALELAS) as ex:
+        futuros = {ex.submit(termos_do_contrato, i): i for i in ids}
+        for n, f in enumerate(as_completed(futuros), 1):
+            try:
+                linhas.append(f.result())
+            except (requests.RequestException, ValueError) as e:
+                falhas.append(futuros[f])
+                log.error("Termos de %s: falhou (%s)", futuros[f], e)
+            if n % 50 == 0 or n == len(ids):
+                passado = time.monotonic() - t0
+                log.info("Termos aditivos: %d de %d contratos (%d prorrogados até agora). Restante estimado: %s",
+                         n, len(ids), sum(1 for x in linhas if x["fim_vigencia_aditivo"]),
+                         _tempo(passado / n * (len(ids) - n)))
+    return pd.DataFrame(linhas), falhas

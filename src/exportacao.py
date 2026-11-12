@@ -16,7 +16,7 @@ COLS_OPORTUNIDADES = ["codigo_ibge", "municipio", "orgao", "tipo_orgao", "objeto
                       "valor_estimado", "data_publicacao", "data_abertura", "situacao", "nota", "link", "plataforma"]
 COLS_MOVIMENTACOES = ["data", "tipo", "codigo_ibge", "municipio", "descricao", "fornecedor", "valor", "link"]
 COLS_CONTRATOS = ["codigo_ibge", "municipio", "orgao", "tipo_orgao", "fornecedor", "cnpj", "objeto", "categoria",
-                  "valor", "inicio_vigencia", "fim_vigencia", "link", "plataforma"]
+                  "valor", "inicio_vigencia", "fim_vigencia", "fim_vigencia_original", "prorrogado", "link", "plataforma"]
 
 
 def oportunidades(contratacoes: pd.DataFrame, populacao: pd.DataFrame, hoje: date) -> pd.DataFrame:
@@ -74,6 +74,8 @@ def contratos_ti(contratos: pd.DataFrame) -> pd.DataFrame:
     if contratos.empty:
         return pd.DataFrame(columns=COLS_CONTRATOS)
     contratos = contratos.assign(fornecedor=nome_fornecedor_padrao(contratos))
+    if "prorrogado" not in contratos.columns:   # sem termos consultados: vigência do registro original
+        contratos = contratos.assign(fim_vigencia_original=contratos["fim_vigencia"], prorrogado=False)
     return contratos.rename(columns={"fornecedor_cnpj": "cnpj", "valor_global": "valor"}) \
         .assign(link=contratos["id_pncp"].map(link_contrato), tipo_orgao=contratos["orgao"].map(tipo_orgao))[COLS_CONTRATOS].sort_values(["municipio", "fim_vigencia"]).reset_index(drop=True)
 

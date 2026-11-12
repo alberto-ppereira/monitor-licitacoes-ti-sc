@@ -18,7 +18,7 @@ import json
 import logging
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -261,6 +261,40 @@ def buscar(con, termo: str, desde: date) -> None:
         log.warning("%d bloco(s) incompletos; rode 'python main.py buscar' de novo para completar.", incompletos)
 
 
+def aditivos(con, todos: bool = False) -> None:
+    """Consulta os termos aditivos dos contratos de TI e grava a vigência prorrogada.
+
+    Alvo: contratos de TI vencidos há até ADITIVOS_VENCIDOS_HA_DIAS ou que vencem nos próximos
+    ADITIVOS_VENCENDO_EM_DIAS, ainda não consultados ou consultados há mais de ADITIVOS_REVISAR_DIAS
+    (com --todos, ignora esse prazo). Pode ser interrompido: o que já foi consultado fica gravado.
+    """
+    hoje = date.today()
+    ct = banco.ler(con, "contratos")
+    ct = ct[ct["ti"] == 1]
+    fim = banco.vigencia_efetiva(ct)["fim_vigencia"]
+    alvo = ct[fim.between(str(hoje - timedelta(days=C.ADITIVOS_VENCIDOS_HA_DIAS)),
+                          str(hoje + timedelta(days=C.ADITIVOS_VENCENDO_EM_DIAS)))]
+    if not todos:
+        limite = (datetime.now() - timedelta(days=C.ADITIVOS_REVISAR_DIAS)).isoformat(timespec="seconds")
+        alvo = alvo[alvo["termos_consultados_em"].isna() | (alvo["termos_consultados_em"] < limite)]
+    ids = alvo["id_pncp"].tolist()
+    log.info("Termos aditivos: %d contratos de TI para consultar (vencidos há até %d dias ou vencendo em %d).",
+             len(ids), C.ADITIVOS_VENCIDOS_HA_DIAS, C.ADITIVOS_VENCENDO_EM_DIAS)
+    gravados = prorrogados = 0
+    for i in range(0, len(ids), 200):   # grava em blocos: uma interrupção perde no máximo um bloco
+        df, falhas = pncp.termos_em_lote(ids[i:i + 200])
+        if not df.empty:
+            df["termos_consultados_em"] = datetime.now().isoformat(timespec="seconds")
+            gravados += banco.gravar(con, "contratos", df)
+            prorrogados += df["fim_vigencia_aditivo"].notna().sum()
+        if falhas:
+            log.warning("%d contrato(s) sem resposta neste bloco; serão consultados na próxima execução.", len(falhas))
+    antes = (ct["fim_vigencia"] >= str(hoje)).sum()
+    depois = (banco.vigencia_efetiva(banco.ler(con, "contratos").query("ti == 1"))["fim_vigencia"] >= str(hoje)).sum()
+    log.info("Termos aditivos: %d contratos consultados, %d com prorrogação. Contratos de TI vigentes: %d -> %d.",
+             gravados, prorrogados, antes, depois)
+
+
 def reclassificar(con) -> None:
     """Refaz a marcação de TI e as categorias no banco, depois de ajustar os termos no config."""
     for tabela in ("contratacoes", "contratos"):
@@ -275,7 +309,7 @@ def reclassificar(con) -> None:
 def exportar(con, demo: bool = False) -> None:
     hoje = date.today()
     todas, contratos = banco.ler(con, "contratacoes"), banco.ler(con, "contratos")
-    contratacoes, contratos = todas[todas["ti"] == 1], contratos[contratos["ti"] == 1]
+    contratacoes, contratos = todas[todas["ti"] == 1], banco.vigencia_efetiva(contratos[contratos["ti"] == 1])
     mun = banco.ler(con, "municipios")
     pop = mun[["codigo_ibge", "populacao"]].dropna() if not mun.empty else mun
     tabelas = {
@@ -296,13 +330,15 @@ def main(argv=None) -> None:
                         handlers=[logging.StreamHandler(sys.stdout),
                                   logging.FileHandler(C.ARQUIVO_LOG, mode="w", encoding="utf-8")])
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("comando", choices=["diagnostico", "coletar", "exportar", "tudo", "reclassificar", "orgaos", "importar", "buscar"])
+    p.add_argument("comando", choices=["diagnostico", "coletar", "exportar", "tudo", "reclassificar", "orgaos", "importar", "buscar", "aditivos"])
     p.add_argument("--dias", type=int, help="tamanho do período a coletar (padrão: incremental, ou 30 na primeira vez)")
     p.add_argument("--csv", nargs="+", help="com 'orgaos' ou 'importar': exportações de contratos do portal do PNCP")
     p.add_argument("--termo", default="sistema", help="com 'buscar': palavra-chave da busca no portal (padrão: sistema)")
     p.add_argument("--desde", default="2021-01-01", help="com 'buscar': data de assinatura inicial (AAAA-MM-DD)")
     p.add_argument("--sem-contratos", action="store_true",
                    help="com 'coletar'/'tudo': pula a busca de contratos por órgão (usa os já importados)")
+    p.add_argument("--todos", action="store_true",
+                   help="com 'aditivos': consulta de novo também os contratos consultados há menos de 30 dias")
     a = p.parse_args(argv)
     if a.comando == "diagnostico":
         return diagnostico(a.dias or 7)
@@ -310,6 +346,8 @@ def main(argv=None) -> None:
     try:
         if a.comando in ("coletar", "tudo"):
             coletar(con, a.dias, com_contratos=not a.sem_contratos)
+        if a.comando in ("aditivos", "tudo"):
+            aditivos(con, todos=a.todos)
         if a.comando == "buscar":
             buscar(con, a.termo, date.fromisoformat(a.desde))
         if a.comando == "importar":
@@ -320,7 +358,7 @@ def main(argv=None) -> None:
             carregar_orgaos(con, a.dias, a.csv)
         if a.comando == "reclassificar":
             reclassificar(con)
-        if a.comando in ("exportar", "tudo", "reclassificar", "importar", "buscar"):
+        if a.comando in ("exportar", "tudo", "reclassificar", "importar", "buscar", "aditivos"):
             exportar(con)
     finally:
         con.close()

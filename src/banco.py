@@ -35,7 +35,9 @@ CREATE INDEX IF NOT EXISTS ix_contratacoes_ibge ON contratacoes(codigo_ibge);
 # `ti` entra como 1 nos registros antigos, porque as versões anteriores só gravavam registros de TI.
 NOVAS_COLUNAS = {"contratacoes": {"esfera": "TEXT", "ti": "INTEGER DEFAULT 1", "plataforma": "TEXT"},
                  "contratos": {"esfera": "TEXT", "categoria_processo": "TEXT", "ti": "INTEGER DEFAULT 1",
-                               "plataforma": "TEXT"},
+                               "plataforma": "TEXT",
+                               "fim_vigencia_aditivo": "TEXT", "valor_aditivos": "REAL", "termos": "INTEGER", "data_rescisao": "TEXT",
+                               "termos_consultados_em": "TEXT"},
                  "orgaos": {"contratos_ate": "TEXT"}}
 
 
@@ -78,6 +80,26 @@ def gravar(con: sqlite3.Connection, tabela: str, df: pd.DataFrame) -> int:
 
 def ler(con: sqlite3.Connection, tabela: str) -> pd.DataFrame:
     return pd.read_sql_query(f"SELECT * FROM {tabela}", con)
+
+
+def vigencia_efetiva(contratos: pd.DataFrame) -> pd.DataFrame:
+    """Usa a maior data de vigência entre o contrato e seus termos aditivos.
+
+    Guarda a data do registro original em `fim_vigencia_original` e marca `prorrogado` quando um aditivo
+    estendeu o prazo. A tabela no banco não muda: a data do aditivo fica numa coluna própria, para que
+    uma nova carga do contrato (busca, importação) não apague a prorrogação.
+    """
+    if contratos.empty or "fim_vigencia_aditivo" not in contratos.columns:
+        return contratos.assign(fim_vigencia_original=contratos.get("fim_vigencia"), prorrogado=False, rescindido=False)
+    orig = contratos["fim_vigencia"]
+    adit = contratos["fim_vigencia_aditivo"]
+    maior = adit.where(adit.notna() & (adit.fillna("") > orig.fillna("")), orig)
+    prorrogado = maior.ne(orig) & adit.notna()
+    # contrato rescindido termina na data da rescisão, mesmo que a vigência registrada seja maior
+    resc = contratos.get("data_rescisao", pd.Series(None, index=contratos.index))
+    maior = resc.where(resc.notna() & (resc.fillna("9999") < maior.fillna("9999")), maior)
+    return contratos.assign(fim_vigencia_original=orig, fim_vigencia=maior, prorrogado=prorrogado,
+                            rescindido=resc.notna())
 
 
 def registrar_execucao(con, inicio, fim, n_contratacoes, n_contratos, obs=""):

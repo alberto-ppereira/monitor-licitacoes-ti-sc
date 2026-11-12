@@ -125,7 +125,7 @@ svg text{fill:var(--ink2);font-size:11px}
     </div>
     <div class="kpis" id="k3"></div>
     <div class="grid-mapa">
-      <div class="card"><h2>Contratos de TI vigentes por prefeitura</h2><p class="note">Clique num município para ver os contratos. Contratos de consórcios contam no município sede. A vigência é a do registro do contrato no PNCP: prorrogações por termo aditivo podem não estar refletidas.</p><div class="legend" id="lg3"></div><div id="mapa"><div class="empty">Carregando o mapa do IBGE…</div></div></div>
+      <div class="card"><h2>Contratos de TI vigentes por prefeitura</h2><p class="note">Clique num município para ver os contratos. Contratos de consórcios contam no município sede. A vigência considera os termos aditivos de prorrogação consultados no PNCP (python main.py aditivos).</p><div class="legend" id="lg3"></div><div id="mapa"><div class="empty">Carregando o mapa do IBGE…</div></div></div>
       <div class="card"><h2 id="p3t">Selecione um município</h2><p class="note" id="p3n">Ou veja abaixo os fornecedores com mais prefeituras.</p><div class="tablewrap" id="p3"></div></div>
     </div>
     <div class="card"><h2>Fornecedores por número de prefeituras com contrato vigente</h2><p class="note">Respeita os filtros acima.</p><div id="ch3"></div></div>
@@ -323,7 +323,7 @@ function render3(){
     $("#p3").innerHTML = lista.length ? `<table><thead><tr><th>Fornecedor</th><th>Órgão</th><th class="n">Valor</th><th>Fim da vigência</th><th>Contrato</th></tr></thead><tbody>${
       lista.map(c => { const d = dias(c.fim_vigencia);
         const st = d < 0 ? '<span class="muted">encerrado</span>' : d <= 365 ? `<span class="urg">vence em ${d} dias</span>` : `vence em ${d} dias`;
-        return `<tr><td>${esc(c.fornecedor)}<div class="muted">${esc(c.cnpj)}</div></td><td title="${esc(c.objeto)}">${esc(c.orgao)}<div class="muted">${esc(c.tipo_orgao || "")} · ${esc(c.categoria)}</div></td><td class="n">${fBRL(c.valor)}</td><td>${fData(c.fim_vigencia)}<div>${st}</div></td><td>${link(c.link)}</td></tr>`; }).join("")
+        return `<tr><td>${esc(c.fornecedor)}<div class="muted">${esc(c.cnpj)}</div></td><td title="${esc(c.objeto)}">${esc(c.orgao)}<div class="muted">${esc(c.tipo_orgao || "")} · ${esc(c.categoria)}</div></td><td class="n">${fBRL(c.valor)}</td><td>${fData(c.fim_vigencia)}${c.prorrogado ? `<div class="muted" title="Vigência original: ${fData(c.fim_vigencia_original)}">prorrogado por aditivo</div>` : ""}<div>${st}</div></td><td>${link(c.link)}</td></tr>`; }).join("")
     }</tbody></table>` : '<div class="empty">Nenhum contrato de TI registrado para este município com os filtros atuais.</div>';
   } else {
     const munis = Object.entries(porMun).map(([cod,l]) => ({cod, nome: NOMES[cod] || l[0].municipio, n: l.length, prox: l.map(c=>c.fim_vigencia).sort()[0]})).sort((a,b) => b.n - a.n || a.nome.localeCompare(b.nome,"pt-BR"));

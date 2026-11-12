@@ -47,6 +47,8 @@ def contratos(ct: pd.DataFrame, hoje: date) -> pd.DataFrame:
         "objeto": ct["objeto"], "categoria": ct["categoria"], "valor": ct["valor_global"],
         "data_assinatura": ct["data_assinatura"], "ano_assinatura": ct["data_assinatura"].str[:4],
         "inicio_vigencia": ct["inicio_vigencia"], "fim_vigencia": ct["fim_vigencia"],
+        "fim_vigencia_original": ct.get("fim_vigencia_original", ct["fim_vigencia"]),
+        "prorrogado": ct.get("prorrogado", pd.Series(False, index=ct.index)).map({True: "Sim", False: "Não"}),
         "situacao": (d >= 0).map({True: "Vigente", False: "Encerrado"}).where(d.notna(), "Sem data"),
         "dias_para_vencer": d, "faixa_vencimento": _faixa_vencimento(d),
         "plataforma": ct["plataforma"], "link": ct["id_pncp"].map(link_contrato),
