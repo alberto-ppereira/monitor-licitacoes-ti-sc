@@ -12,6 +12,7 @@ Uso:
   python main.py importar --csv a.csv   # órgãos e contratos de exportações do portal (carga histórica rápida)
   python main.py tudo --sem-contratos   # coleta só licitações (rápido) e exporta
   python main.py buscar                 # carga histórica: contratos com "sistema" desde 2021, pela busca do portal
+  python main.py publicar               # publica as tabelas do Looker no BigQuery (após exportar)
 """
 import argparse
 import json
@@ -276,7 +277,8 @@ def aditivos(con, todos: bool = False) -> None:
                           str(hoje + timedelta(days=C.ADITIVOS_VENCENDO_EM_DIAS)))]
     if not todos:
         limite = (datetime.now() - timedelta(days=C.ADITIVOS_REVISAR_DIAS)).isoformat(timespec="seconds")
-        alvo = alvo[alvo["termos_consultados_em"].isna() | (alvo["termos_consultados_em"] < limite)]
+        sem_valor = alvo["termos"].fillna(0).gt(0) & alvo["valor_prorrogacao"].isna()   # consultados antes da coluna existir
+        alvo = alvo[alvo["termos_consultados_em"].isna() | (alvo["termos_consultados_em"] < limite) | sem_valor]
     ids = alvo["id_pncp"].tolist()
     log.info("Termos aditivos: %d contratos de TI para consultar (vencidos há até %d dias ou vencendo em %d).",
              len(ids), C.ADITIVOS_VENCIDOS_HA_DIAS, C.ADITIVOS_VENCENDO_EM_DIAS)
@@ -309,19 +311,35 @@ def reclassificar(con) -> None:
 def exportar(con, demo: bool = False) -> None:
     hoje = date.today()
     todas, contratos = banco.ler(con, "contratacoes"), banco.ler(con, "contratos")
-    contratacoes, contratos = todas[todas["ti"] == 1], banco.vigencia_efetiva(contratos[contratos["ti"] == 1])
+    contratacoes, contratos = todas[todas["ti"] == 1], banco.mensalidade(banco.vigencia_efetiva(contratos[contratos["ti"] == 1]))
     mun = banco.ler(con, "municipios")
     pop = mun[["codigo_ibge", "populacao"]].dropna() if not mun.empty else mun
     tabelas = {
         "oportunidades": exportacao.oportunidades(contratacoes, pop, hoje),
         "movimentacoes": exportacao.movimentacoes(contratacoes, contratos, hoje),
-        "contratos": exportacao.contratos_ti(contratos),
+        "contratos": exportacao.contratos_ti(contratos, hoje),
     }
+    
+    # Injeta a data de atualização em todas as tabelas (HTML e CSVs)
+    for df in tabelas.values():
+        if not df.empty:
+            df["data_atualizacao"] = hoje.isoformat()
+            
     exportacao.exportar(tabelas, C.SAIDA, hoje, demo)
     log.info("Exportado em %s: %s", C.SAIDA, {k: len(v) for k, v in tabelas.items()})
     n = looker.exportar(tabelas["oportunidades"], tabelas["movimentacoes"], contratos, mun, todas, C.SAIDA / "looker", hoje)
     log.info("Tabelas para o Looker Studio em %s: %s", C.SAIDA / "looker", n)
 
+def publicar() -> None:
+    """Publica as 5 tabelas do Looker + a de controle no BigQuery (WRITE_TRUNCATE).
+
+    Lê os CSVs já exportados em saida/looker/. Requer google-cloud-bigquery instalado e credenciais
+    (GOOGLE_APPLICATION_CREDENTIALS ou config.BIGQUERY_CAMINHO_CHAVE). A checagem de integridade
+    compara as contagens com a última publicação e aborta se qualquer tabela cair mais que
+    config.BIGQUERY_QUEDA_MAXIMA.
+    """
+    from src.bigquery import publicar_tabelas
+    publicar_tabelas(C.SAIDA / "looker")
 
 def main(argv=None) -> None:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -330,7 +348,7 @@ def main(argv=None) -> None:
                         handlers=[logging.StreamHandler(sys.stdout),
                                   logging.FileHandler(C.ARQUIVO_LOG, mode="w", encoding="utf-8")])
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("comando", choices=["diagnostico", "coletar", "exportar", "tudo", "reclassificar", "orgaos", "importar", "buscar", "aditivos"])
+    p.add_argument("comando", choices=["diagnostico", "coletar", "exportar", "tudo", "reclassificar", "orgaos", "importar", "buscar", "aditivos", "publicar"])
     p.add_argument("--dias", type=int, help="tamanho do período a coletar (padrão: incremental, ou 30 na primeira vez)")
     p.add_argument("--csv", nargs="+", help="com 'orgaos' ou 'importar': exportações de contratos do portal do PNCP")
     p.add_argument("--termo", default="sistema", help="com 'buscar': palavra-chave da busca no portal (padrão: sistema)")
@@ -360,6 +378,8 @@ def main(argv=None) -> None:
             reclassificar(con)
         if a.comando in ("exportar", "tudo", "reclassificar", "importar", "buscar", "aditivos"):
             exportar(con)
+        if a.comando in ("publicar", "tudo"):
+            publicar()
     finally:
         con.close()
 

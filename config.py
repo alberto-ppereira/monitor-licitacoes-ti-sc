@@ -158,3 +158,23 @@ BANCO_HISTORICO = RAIZ / "data" / "historico_contratos.db"
 ADITIVOS_VENCIDOS_HA_DIAS = 1095   # consulta contratos de TI vencidos há até 3 anos...
 ADITIVOS_VENCENDO_EM_DIAS = 90     # ...e os que vencem nos próximos 90 dias
 ADITIVOS_REVISAR_DIAS = 30         # um contrato já consultado só é consultado de novo depois desse prazo
+
+# Mensalidade estimada (valor ÷ meses): só para vigências dentro desta faixa
+MENSALIDADE_MESES_MIN = 6
+MENSALIDADE_MESES_MAX = 60
+
+
+# --- BigQuery (publicação para o Looker Studio) ---
+# Sandbox sem custo (10 GiB de armazenamento vitalício, 1 TiB/mês de consulta, tabelas expiram em
+# 60 dias sem atualização). Requer um projeto no Google Cloud, a API BigQuery ativa e uma conta de
+# serviço com as permissões BigQuery Data Editor + BigQuery Job User. A chave JSON fica FORA do Git
+# (credenciais/ no .gitignore); o caminho é lido de GOOGLE_APPLICATION_CREDENTIALS ou desta linha.
+BIGQUERY_PROJETO = "monitor-licitacoes-bq"   # ID do projeto no Google Cloud
+BIGQUERY_DATASET = "licitacoes"              # dataset criado no console
+BIGQUERY_LOCAL = "southamerica-east1"        # mesma região do dataset (informativo; o cliente usa o do projeto)
+BIGQUERY_CAMINHO_CHAVE = r"C:\DATA\c0d3\monitor-licitacoes\credenciais\bigquery-key.json"  # ex.: r"C:\DATA\c0d3\monitor-licitacoes\credenciais\bigquery-key.json"
+                                             # vazio = usa a variável GOOGLE_APPLICATION_CREDENTIALS
+BIGQUERY_TABELA_CONTROLE = "controle"        # tabela de controle (data/hora + contagens da última publicação)
+# Se qualquer tabela publicada cair mais que este percentual vs. a última publicação, o publicar aborta
+# (protege o painel do Looker de uma coleta incompleta ou de um filtro de TI quebrado). 0.20 = 20%.
+BIGQUERY_QUEDA_MAXIMA = 0.20

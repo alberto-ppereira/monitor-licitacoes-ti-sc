@@ -36,7 +36,7 @@ CREATE INDEX IF NOT EXISTS ix_contratacoes_ibge ON contratacoes(codigo_ibge);
 NOVAS_COLUNAS = {"contratacoes": {"esfera": "TEXT", "ti": "INTEGER DEFAULT 1", "plataforma": "TEXT"},
                  "contratos": {"esfera": "TEXT", "categoria_processo": "TEXT", "ti": "INTEGER DEFAULT 1",
                                "plataforma": "TEXT",
-                               "fim_vigencia_aditivo": "TEXT", "valor_aditivos": "REAL", "termos": "INTEGER", "data_rescisao": "TEXT",
+                               "fim_vigencia_aditivo": "TEXT", "valor_aditivos": "REAL", "valor_prorrogacao": "REAL", "termos": "INTEGER", "data_rescisao": "TEXT",
                                "termos_consultados_em": "TEXT"},
                  "orgaos": {"contratos_ate": "TEXT"}}
 
@@ -100,6 +100,34 @@ def vigencia_efetiva(contratos: pd.DataFrame) -> pd.DataFrame:
     maior = resc.where(resc.notna() & (resc.fillna("9999") < maior.fillna("9999")), maior)
     return contratos.assign(fim_vigencia_original=orig, fim_vigencia=maior, prorrogado=prorrogado,
                             rescindido=resc.notna())
+
+
+def _meses(inicio: pd.Series, fim: pd.Series) -> pd.Series:
+    return ((pd.to_datetime(fim, errors="coerce") - pd.to_datetime(inicio, errors="coerce")).dt.days / 30.44).round()
+
+
+def mensalidade(contratos: pd.DataFrame) -> pd.DataFrame:
+    """Mensalidade estimada de cada contrato (depois de `vigencia_efetiva`).
+
+    - Prorrogado: valor dos termos de prorrogação ÷ meses prorrogados. É o melhor número: só o serviço
+      contínuo, sem implantação e conversão.
+    - Sem prorrogação: valor global ÷ meses de vigência (inclui implantação; tende a sair um pouco acima).
+    - Vigência abaixo de MENSALIDADE_MESES_MIN ou acima de MENSALIDADE_MESES_MAX: sem estimativa (em geral o
+      valor é de uma parcela ou estimado, e a divisão engana).
+    """
+    if contratos.empty:
+        return contratos.assign(mensalidade=None, base_mensalidade=None)
+    orig = contratos.get("fim_vigencia_original", contratos["fim_vigencia"])
+    m_orig = _meses(contratos["inicio_vigencia"], orig)
+    ok = m_orig.between(C.MENSALIDADE_MESES_MIN, C.MENSALIDADE_MESES_MAX) & contratos["valor_global"].gt(0)
+    mens = (contratos["valor_global"] / m_orig).where(ok)
+    base = pd.Series("contrato original", index=contratos.index).where(ok, "sem estimativa (vigência atípica)")
+    if "valor_prorrogacao" in contratos:
+        m_pror = _meses(orig, contratos["fim_vigencia_aditivo"])
+        pr = contratos["valor_prorrogacao"].gt(0) & m_pror.ge(1)
+        mens = mens.where(~pr, contratos["valor_prorrogacao"] / m_pror)
+        base = base.where(~pr, "aditivo de prorrogação")
+    return contratos.assign(mensalidade=mens.round(2), base_mensalidade=base)
 
 
 def registrar_execucao(con, inicio, fim, n_contratacoes, n_contratos, obs=""):

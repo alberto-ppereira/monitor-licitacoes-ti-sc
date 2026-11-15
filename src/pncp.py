@@ -328,7 +328,8 @@ def termos_do_contrato(id_pncp: str) -> dict:
     termos e se houve rescisão. Um contrato sem termos devolve termos = 0.
     """
     partes = _partes_contrato(id_pncp)
-    vazio = {"id_pncp": id_pncp, "fim_vigencia_aditivo": None, "valor_aditivos": None, "termos": 0, "data_rescisao": None}
+    vazio = {"id_pncp": id_pncp, "fim_vigencia_aditivo": None, "valor_aditivos": None, "valor_prorrogacao": None, "termos": 0,
+             "data_rescisao": None}
     if not partes:
         return vazio
     cnpj, ano, seq = partes
@@ -340,10 +341,13 @@ def termos_do_contrato(id_pncp: str) -> dict:
         raise
     fins = [_data(t.get("dataVigenciaFim")) for t in termos if t.get("dataVigenciaFim")]
     acrescido = sum(float(t.get("valorAcrescido") or 0) for t in termos)
+    # valor só dos termos que estendem a vigência: é o preço do serviço contínuo no período prorrogado,
+    # sem implantação, reajustes e acréscimos de escopo
+    prorrogacao = sum(float(t.get("valorAcrescido") or 0) for t in termos if t.get("dataVigenciaFim"))
     rescisoes = [_data(t.get("dataAssinatura")) for t in termos
                  if "resc" in str(t.get("tipoTermoContratoNome") or "").lower() and t.get("dataAssinatura")]
     return {"id_pncp": id_pncp, "fim_vigencia_aditivo": max(fins) if fins else None,
-            "valor_aditivos": acrescido or None, "termos": len(termos),
+            "valor_aditivos": acrescido or None, "valor_prorrogacao": prorrogacao or None, "termos": len(termos),
             "data_rescisao": min(rescisoes) if rescisoes else None}
 
 

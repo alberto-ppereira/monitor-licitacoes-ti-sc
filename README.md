@@ -35,6 +35,7 @@ Conferidas contra exportações do portal do PNCP com contratos de dois grandes 
 | Licitação revogada, anulada, suspensa, deserta ou fracassada não é oportunidade | `SITUACOES_FORA` | Continuam no banco, saem da aba de oportunidades |
 | Tipo de órgão pelo nome (prefeitura, câmara, fundo, fundação, autarquia, consórcio) | `tratamento.tipo_orgao` | Contratos de consórcio contam no município sede (onde o PNCP os registra) e aparecem marcados como consórcio |
 | Vigência prorrogada por termo aditivo | `python main.py aditivos` | Software é serviço contínuo, renovado ano a ano por aditivo; a busca e a API de consulta só trazem a vigência original (ex.: contratos vencidos em 03/2026 e prorrogados até 03/2027). Rescisão encerra o contrato na data do termo |
+| Mensalidade estimada por contrato e por município | `banco.mensalidade` | Prorrogado: valor dos termos de prorrogação ÷ meses prorrogados (só o serviço contínuo). Sem aditivo: valor global ÷ meses de vigência (inclui implantação, tende a sair acima). Vigência fora de 6 a 60 meses fica sem estimativa. O município soma os contratos vigentes de todas as entidades |
 | Plataforma que publicou no PNCP | coluna `plataforma` | Em geral é o ERP do órgão: 117 de 123 contratos de um fornecedor foram publicados pela plataforma do próprio fornecedor; no outro, 84 de 88 |
 | Fornecedor pela raiz do CNPJ (8 dígitos) | `FORNECEDOR_CNPJ_RAIZES` | Inclui filiais; várias raízes cobrem o grupo econômico |
 
@@ -81,9 +82,9 @@ A cada exportação, `saida/looker/` recebe cinco CSVs (UTF-8, vírgula, ponto d
 |---|---|---|
 | `oportunidades.csv` | licitação de TI aberta | `nota`, `dias_ate_disputa`, `faixa_prazo`, `tipo_orgao`, `plataforma`, `link` |
 | `movimentacoes.csv` | evento dos últimos dias | `data`, `tipo` (licitação publicada / contrato assinado) |
-| `contratos.csv` | contrato de TI | `situacao` (vigente/encerrado), `dias_para_vencer`, `faixa_vencimento`, `fornecedor_cnpj_raiz`, `ano_assinatura` |
-| `municipios.csv` | município de SC (295) | `populacao`, `contratos_vigentes`, `fornecedor_principal`, `proximo_vencimento`, `plataforma_principal`, `situacao_ti` |
-| `fornecedores.csv` | fornecedor | `municipios_vigentes`, `contratos_vigentes`, `valor_vigente` |
+| `contratos.csv` | contrato de TI | `mensalidade`, `base_mensalidade`, `prorrogado`, `situacao` (vigente/encerrado), `dias_para_vencer`, `faixa_vencimento`, `fornecedor_cnpj_raiz`, `ano_assinatura` |
+| `municipios.csv` | município de SC (295) | `mensalidade_vigente`, `entidades_com_contrato`, `populacao`, `contratos_vigentes`, `fornecedor_principal`, `proximo_vencimento`, `plataforma_principal`, `situacao_ti` |
+| `fornecedores.csv` | fornecedor | `mensalidade_vigente`, `municipios_vigentes`, `contratos_vigentes`, `valor_vigente` |
 
 Todas têm a coluna `local` ("Município, SC, Brasil"): no Looker, defina o tipo como **Geográfico → Cidade** para
 o mapa. Defina `codigo_ibge` e os CNPJs como **Texto**.

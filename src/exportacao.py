@@ -13,10 +13,10 @@ from src.pncp import link_contrato
 from src.tratamento import dias_ate, pontuar, situacao_encerrada, tipo_orgao
 
 COLS_OPORTUNIDADES = ["codigo_ibge", "municipio", "orgao", "tipo_orgao", "objeto", "categoria", "modalidade",
-                      "valor_estimado", "data_publicacao", "data_abertura", "situacao", "nota", "link", "plataforma"]
-COLS_MOVIMENTACOES = ["data", "tipo", "codigo_ibge", "municipio", "descricao", "fornecedor", "valor", "link"]
+                      "valor_estimado", "data_publicacao", "data_abertura", "situacao", "nota", "link", "plataforma", "data_atualizacao"]
+COLS_MOVIMENTACOES = ["data", "tipo", "codigo_ibge", "municipio", "descricao", "fornecedor", "valor", "link", "data_atualizacao"]
 COLS_CONTRATOS = ["codigo_ibge", "municipio", "orgao", "tipo_orgao", "fornecedor", "cnpj", "objeto", "categoria",
-                  "valor", "inicio_vigencia", "fim_vigencia", "fim_vigencia_original", "prorrogado", "link", "plataforma"]
+                  "valor", "inicio_vigencia", "fim_vigencia", "fim_vigencia_original", "prorrogado", "mensalidade", "base_mensalidade", "link", "plataforma", "data_atualizacao"]
 
 
 def oportunidades(contratacoes: pd.DataFrame, populacao: pd.DataFrame, hoje: date) -> pd.DataFrame:
@@ -36,6 +36,9 @@ def oportunidades(contratacoes: pd.DataFrame, populacao: pd.DataFrame, hoje: dat
     df = df.sort_values("nota", ascending=False)
     chave = df[["municipio", "data_abertura"]].assign(v=df["valor_estimado"].round(0))
     df = df[~chave.duplicated()]
+    
+    df["data_atualizacao"] = hoje.isoformat()
+    
     return df[COLS_OPORTUNIDADES].reset_index(drop=True)
 
 
@@ -57,9 +60,14 @@ def movimentacoes(contratacoes: pd.DataFrame, contratos: pd.DataFrame, hoje: dat
             "data": data[k.index], "tipo": "Contrato assinado", "codigo_ibge": k["codigo_ibge"],
             "municipio": k["municipio"], "descricao": k["objeto"], "fornecedor": k["fornecedor"],
             "valor": k["valor_global"], "link": k["id_pncp"].map(link_contrato)}))
+            
     if not partes:
         return pd.DataFrame(columns=COLS_MOVIMENTACOES)
-    return pd.concat(partes, ignore_index=True).sort_values("data", ascending=False)[COLS_MOVIMENTACOES]
+        
+    out = pd.concat(partes, ignore_index=True).sort_values("data", ascending=False)
+    out["data_atualizacao"] = hoje.isoformat()
+    
+    return out[COLS_MOVIMENTACOES]
 
 
 def nome_fornecedor_padrao(contratos: pd.DataFrame) -> pd.Series:
@@ -70,14 +78,22 @@ def nome_fornecedor_padrao(contratos: pd.DataFrame) -> pd.Series:
     return raiz.map(mais_comum).where(raiz != "", nome)
 
 
-def contratos_ti(contratos: pd.DataFrame) -> pd.DataFrame:
+def contratos_ti(contratos: pd.DataFrame, hoje: date) -> pd.DataFrame:
     if contratos.empty:
         return pd.DataFrame(columns=COLS_CONTRATOS)
+        
     contratos = contratos.assign(fornecedor=nome_fornecedor_padrao(contratos))
     if "prorrogado" not in contratos.columns:   # sem termos consultados: vigência do registro original
         contratos = contratos.assign(fim_vigencia_original=contratos["fim_vigencia"], prorrogado=False)
-    return contratos.rename(columns={"fornecedor_cnpj": "cnpj", "valor_global": "valor"}) \
-        .assign(link=contratos["id_pncp"].map(link_contrato), tipo_orgao=contratos["orgao"].map(tipo_orgao))[COLS_CONTRATOS].sort_values(["municipio", "fim_vigencia"]).reset_index(drop=True)
+    if "mensalidade" not in contratos.columns:
+        contratos = contratos.assign(mensalidade=None, base_mensalidade=None)
+        
+    out = contratos.rename(columns={"fornecedor_cnpj": "cnpj", "valor_global": "valor"}) \
+        .assign(link=contratos["id_pncp"].map(link_contrato), tipo_orgao=contratos["orgao"].map(tipo_orgao))
+        
+    out["data_atualizacao"] = hoje.isoformat()
+    
+    return out[COLS_CONTRATOS].sort_values(["municipio", "fim_vigencia"]).reset_index(drop=True)
 
 
 def exportar(tabelas: dict[str, pd.DataFrame], pasta: Path, hoje: date, demo: bool = False) -> None:

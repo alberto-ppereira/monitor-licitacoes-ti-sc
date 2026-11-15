@@ -49,6 +49,7 @@ def contratos(ct: pd.DataFrame, hoje: date) -> pd.DataFrame:
         "inicio_vigencia": ct["inicio_vigencia"], "fim_vigencia": ct["fim_vigencia"],
         "fim_vigencia_original": ct.get("fim_vigencia_original", ct["fim_vigencia"]),
         "prorrogado": ct.get("prorrogado", pd.Series(False, index=ct.index)).map({True: "Sim", False: "Não"}),
+        "mensalidade": ct.get("mensalidade"), "base_mensalidade": ct.get("base_mensalidade"),
         "situacao": (d >= 0).map({True: "Vigente", False: "Encerrado"}).where(d.notna(), "Sem data"),
         "dias_para_vencer": d, "faixa_vencimento": _faixa_vencimento(d),
         "plataforma": ct["plataforma"], "link": ct["id_pncp"].map(link_contrato),
@@ -76,6 +77,8 @@ def municipios(mun: pd.DataFrame, ct: pd.DataFrame, op: pd.DataFrame, contrataco
         g = vig.groupby("codigo_ibge")
         agg = pd.DataFrame({
             "contratos_vigentes": g.size(), "valor_vigente": g["valor"].sum(),
+            "mensalidade_vigente": g["mensalidade"].sum(min_count=1) if "mensalidade" in vig else None,
+            "entidades_com_contrato": g["orgao"].nunique(),
             "fornecedores_vigentes": g["fornecedor"].nunique(), "proximo_vencimento": g["fim_vigencia"].min(),
             "fornecedor_principal": g.apply(lambda x: x.groupby("fornecedor")["valor"].sum().idxmax()),
             "contratos_de_consorcio": g["tipo_orgao"].apply(lambda s: int((s == "Consórcio").sum())),
@@ -96,7 +99,7 @@ def municipios(mun: pd.DataFrame, ct: pd.DataFrame, op: pd.DataFrame, contrataco
     for col in ["contratos_vigentes", "fornecedores_vigentes", "contratos_de_consorcio", "contratos_total", "oportunidades_abertas"]:
         if col in base:
             base[col] = base[col].fillna(0).astype(int)
-    for col in ["valor_vigente", "valor_oportunidades"]:
+    for col in ["valor_vigente", "valor_oportunidades", "mensalidade_vigente"]:
         if col in base:
             base[col] = base[col].fillna(0.0)
     base["situacao_ti"] = base["contratos_vigentes"].gt(0).map({True: "Com contrato de TI vigente",
@@ -113,11 +116,12 @@ def fornecedores(ct: pd.DataFrame) -> pd.DataFrame:
                                                                  municipios_total=("codigo_ibge", "nunique"))
     v = vig.groupby(["fornecedor_cnpj_raiz", "fornecedor"]).agg(
         contratos_vigentes=("id_pncp", "size"), municipios_vigentes=("codigo_ibge", "nunique"),
-        valor_vigente=("valor", "sum"), proximo_vencimento=("fim_vigencia", "min"))
+        valor_vigente=("valor", "sum"), mensalidade_vigente=("mensalidade", "sum"), proximo_vencimento=("fim_vigencia", "min"))
     out = tot.join(v, how="left").reset_index()
     for col in ["contratos_vigentes", "municipios_vigentes"]:
         out[col] = out[col].fillna(0).astype(int)
     out["valor_vigente"] = out["valor_vigente"].fillna(0.0)
+    out["mensalidade_vigente"] = out["mensalidade_vigente"].fillna(0.0)
     return out.sort_values(["municipios_vigentes", "valor_vigente"], ascending=False).reset_index(drop=True)
 
 
@@ -126,8 +130,18 @@ def exportar(op: pd.DataFrame, mv: pd.DataFrame, ct_ti: pd.DataFrame, mun: pd.Da
     pasta.mkdir(parents=True, exist_ok=True)
     ct = contratos(ct_ti, hoje)
     opl = oportunidades(op, hoje)
+    
+    # Gera as 5 tabelas
     tabelas = {"oportunidades": opl, "movimentacoes": movimentacoes(mv), "contratos": ct,
                "municipios": municipios(mun, ct, opl, contratacoes_todas), "fornecedores": fornecedores(ct)}
+               
+    # Adiciona a data de atualização em TODAS as 5 tabelas (inclusive fornecedores e municipios)
+    for nome, df in tabelas.items():
+        if not df.empty:
+            df["data_atualizacao"] = hoje.isoformat()
+            
+    # Salva os CSVs
     for nome, df in tabelas.items():
         df.to_csv(pasta / f"{nome}.csv", index=False, encoding="utf-8")
+        
     return {k: len(v) for k, v in tabelas.items()}
