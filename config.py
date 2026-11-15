@@ -52,7 +52,9 @@ PROPOSTAS_EM_ABERTO_UMA_VEZ_POR_DIA = True
 
 # Log
 LOG_POR_PAGINA = True          # registra cada página lida; False deixa o log mais curto
-ARQUIVO_LOG = RAIZ / "data" / "coleta.log"   # cópia do log de cada execução (é sobrescrito)
+ARQUIVO_LOG = RAIZ / "data" / "coleta.log"   # log acumulado das execuções (erros incluídos)
+LOG_TAMANHO_MAXIMO = 5_000_000   # bytes; ao passar disso, vira coleta.log.1 e começa um novo
+LOG_ARQUIVOS_ANTIGOS = 5         # quantos arquivos antigos (coleta.log.1 a .5) são mantidos
 
 # Lista de órgãos. Os contratos são buscados por órgão, e a lista nasce das licitações publicadas. Mas
 # câmaras, fundos e fundações costumam assinar contratos de licitações "multientidade" feitas pela
@@ -125,11 +127,6 @@ CATEGORIAS = {
 }
 CATEGORIA_PADRAO = "Outros sistemas"
 
-# Fornecedores a acompanhar (CNPJ só com números). Preencher com os fornecedores do setor que interessam.
-FORNECEDORES_ACOMPANHADOS: dict[str, str] = {
-    # "00000000000000": "Nome do fornecedor",
-}
-
 # Pontuação de prioridade (0 a 10) das oportunidades
 PESOS = {
     "porte": 3.0,          # população do município (escala log)
@@ -172,8 +169,8 @@ MENSALIDADE_MESES_MAX = 60
 BIGQUERY_PROJETO = "monitor-licitacoes-bq"   # ID do projeto no Google Cloud
 BIGQUERY_DATASET = "licitacoes"              # dataset criado no console
 BIGQUERY_LOCAL = "southamerica-east1"        # mesma região do dataset (informativo; o cliente usa o do projeto)
-BIGQUERY_CAMINHO_CHAVE = r"C:\DATA\c0d3\monitor-licitacoes\credenciais\bigquery-key.json"  # ex.: r"C:\DATA\c0d3\monitor-licitacoes\credenciais\bigquery-key.json"
-                                             # vazio = usa a variável GOOGLE_APPLICATION_CREDENTIALS
+BIGQUERY_CAMINHO_CHAVE = str(RAIZ / "credenciais" / "bigquery-key.json")
+# a variável GOOGLE_APPLICATION_CREDENTIALS, se definida, tem prioridade; "" = usa só a variável
 BIGQUERY_TABELA_CONTROLE = "controle"        # tabela de controle (data/hora + contagens da última publicação)
 # Se qualquer tabela publicada cair mais que este percentual vs. a última publicação, o publicar aborta
 # (protege o painel do Looker de uma coleta incompleta ou de um filtro de TI quebrado). 0.20 = 20%.

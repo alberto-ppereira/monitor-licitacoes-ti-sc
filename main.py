@@ -12,11 +12,13 @@ Uso:
   python main.py importar --csv a.csv   # órgãos e contratos de exportações do portal (carga histórica rápida)
   python main.py tudo --sem-contratos   # coleta só licitações (rápido) e exporta
   python main.py buscar                 # carga histórica: contratos com "sistema" desde 2021, pela busca do portal
+  python main.py aditivos               # termos aditivos: vigência prorrogada dos contratos de TI
   python main.py publicar               # publica as tabelas do Looker no BigQuery (após exportar)
 """
 import argparse
 import json
 import logging
+import logging.handlers
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -319,12 +321,11 @@ def exportar(con, demo: bool = False) -> None:
         "movimentacoes": exportacao.movimentacoes(contratacoes, contratos, hoje),
         "contratos": exportacao.contratos_ti(contratos, hoje),
     }
- 
-            
     exportacao.exportar(tabelas, C.SAIDA, hoje, demo)
     log.info("Exportado em %s: %s", C.SAIDA, {k: len(v) for k, v in tabelas.items()})
     n = looker.exportar(tabelas["oportunidades"], tabelas["movimentacoes"], contratos, mun, todas, C.SAIDA / "looker", hoje)
     log.info("Tabelas para o Looker Studio em %s: %s", C.SAIDA / "looker", n)
+
 
 def publicar() -> None:
     """Publica as 5 tabelas do Looker + a de controle no BigQuery (WRITE_TRUNCATE).
@@ -337,12 +338,15 @@ def publicar() -> None:
     from src.bigquery import publicar_tabelas
     publicar_tabelas(C.SAIDA / "looker")
 
+
 def main(argv=None) -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     C.ARQUIVO_LOG.parent.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S",
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S",
                         handlers=[logging.StreamHandler(sys.stdout),
-                                  logging.FileHandler(C.ARQUIVO_LOG, mode="w", encoding="utf-8")])
+                                  logging.handlers.RotatingFileHandler(
+                                      C.ARQUIVO_LOG, maxBytes=C.LOG_TAMANHO_MAXIMO, backupCount=C.LOG_ARQUIVOS_ANTIGOS,
+                                      encoding="utf-8")])
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("comando", choices=["diagnostico", "coletar", "exportar", "tudo", "reclassificar", "orgaos", "importar", "buscar", "aditivos", "publicar"])
     p.add_argument("--dias", type=int, help="tamanho do período a coletar (padrão: incremental, ou 30 na primeira vez)")
@@ -354,6 +358,17 @@ def main(argv=None) -> None:
     p.add_argument("--todos", action="store_true",
                    help="com 'aditivos': consulta de novo também os contratos consultados há menos de 30 dias")
     a = p.parse_args(argv)
+    log.info("=== Início: python main.py %s ===", " ".join(sys.argv[1:] if argv is None else argv))
+    try:
+        _executar(a)
+    except Exception:
+        # sem isto, um erro numa execução agendada só apareceria na tela, que ninguém vê
+        log.exception("Execução interrompida por erro")
+        sys.exit(1)
+    log.info("=== Fim ===")
+
+
+def _executar(a) -> None:
     if a.comando == "diagnostico":
         return diagnostico(a.dias or 7)
     con = banco.conectar()

@@ -115,6 +115,7 @@ def link_contrato(id_pncp) -> str:
     m = re.match(r"(\d{14})-2-(\d+)/(\d{4})", str(id_pncp or ""))
     return f"https://pncp.gov.br/contratos/{m[1]}/{m[3]}/{int(m[2])}" if m else ""
 
+
 def link_edital_pncp(id_pncp) -> str:
     """Gera a URL do edital no portal do PNCP a partir do id_pncp (ex: '12345678000199-1-000123/2026')."""
     m = re.match(r"(\d{14})-1-(\d+)/(\d{4})", str(id_pncp or ""))
@@ -122,6 +123,7 @@ def link_edital_pncp(id_pncp) -> str:
         return ""
     cnpj, seq, ano = m[1], int(m[2]), m[3]
     return f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
+
 
 def _tabela(linhas: list[dict], colunas: list[str]) -> pd.DataFrame:
     df = pd.DataFrame(linhas, columns=colunas)
@@ -274,7 +276,7 @@ def busca_contratos(termo: str, inicio: date, fim: date, uf: str = C.UF) -> tupl
     Devolve (contratos, completo). Se a janela passar do limite de resultados da busca, é dividida ao meio.
     Contratos cancelados ficam de fora.
     """
-    from src.api import get_json
+    from src.api import get_json   # import aqui (não no topo): os testes trocam api.get_json por uma API simulada
     base = {"q": termo, "tipos_documento": "contrato", "ordenacao": "data", "status": "todos", "ufs": uf,
             "tam_pagina": C.BUSCA_TAMANHO_PAGINA, "data_assinatura_inicio": inicio.isoformat(),
             "data_assinatura_fim": fim.isoformat()}
@@ -314,7 +316,7 @@ def busca_contratos(termo: str, inicio: date, fim: date, uf: str = C.UF) -> tupl
 
 def amostra_bruta(inicio: date, fim: date) -> dict:
     """Um registro bruto de cada endpoint, para conferir os nomes de campo (comando `diagnostico`)."""
-    from src.api import get_json
+    from src.api import get_json   # import aqui (não no topo): os testes trocam api.get_json por uma API simulada
     base = {"dataInicial": _d(inicio), "dataFinal": _d(fim), "pagina": 1}
     pub = get_json(f"{C.PNCP_CONSULTA}/v1/contratacoes/publicacao",
                    {**base, "codigoModalidadeContratacao": 6, "uf": C.UF, "tamanhoPagina": 10})
@@ -354,14 +356,17 @@ def termos_do_contrato(id_pncp: str) -> dict:
     rescisoes = [_data(t.get("dataAssinatura")) for t in termos
                  if "resc" in str(t.get("tipoTermoContratoNome") or "").lower() and t.get("dataAssinatura")]
     return {"id_pncp": id_pncp, "fim_vigencia_aditivo": max(fins) if fins else None,
-            "valor_aditivos": acrescido or None, "valor_prorrogacao": prorrogacao or None, "termos": len(termos),
+            "valor_aditivos": acrescido or None,
+            # 0 (e não None) quando há termos sem valor de prorrogação: None faria o comando `aditivos` achar que o
+            # contrato foi consultado antes dessa coluna existir e consultá-lo de novo em toda execução
+            "valor_prorrogacao": prorrogacao if termos else None, "termos": len(termos),
             "data_rescisao": min(rescisoes) if rescisoes else None}
 
 
 def termos_em_lote(ids: list[str]) -> tuple[pd.DataFrame, list[str]]:
     """Consulta os termos de vários contratos em paralelo, com o mesmo controle de ritmo das outras etapas."""
     linhas, falhas, t0 = [], [], time.monotonic()
-    with ThreadPoolExecutor(max_workers=C.CONSULTAS_PARALELAS) as ex:
+    with ThreadPoolExecutor(max_workers=max(1, C.CONSULTAS_PARALELAS)) as ex:
         futuros = {ex.submit(termos_do_contrato, i): i for i in ids}
         for n, f in enumerate(as_completed(futuros), 1):
             try:

@@ -354,8 +354,73 @@ def main():
         checar("notas entre 0 e 10, maior para Joinville (porte e valor)", op["nota"].between(0, 10).all() and op.iloc[0]["municipio"] == "Joinville")
         checar("movimentações só dos últimos 15 dias (contrato de 400 dias fora)",
                set(mv["tipo"]) == {"Licitação publicada", "Contrato assinado"} and (mv["data"] >= d(-14)).all())
+    verificar_aditivos_e_bigquery()
     print(f"\n{checar.falhas} falha(s).")
     sys.exit(1 if checar.falhas else 0)
+
+
+def verificar_aditivos_e_bigquery():
+    """Vigência efetiva, mensalidade, comando `aditivos` (API simulada) e leitura do controle do BigQuery."""
+    ct = pd.DataFrame({
+        "id_pncp": ["a", "b", "c"], "inicio_vigencia": ["2025-01-01"] * 3,
+        "fim_vigencia": ["2026-01-01", "2026-01-01", "2026-01-01"],
+        "fim_vigencia_aditivo": ["2027-01-01", None, "2027-01-01"],
+        "data_rescisao": [None, None, "2026-06-01"],
+        "valor_global": [120000.0, 120000.0, 120000.0], "valor_prorrogacao": [60000.0, None, None]})
+    v = banco.vigencia_efetiva(ct).set_index("id_pncp")
+    checar("vigência efetiva: aditivo prorroga, sem aditivo mantém, rescisão encerra antes",
+           v.loc["a", "fim_vigencia"] == "2027-01-01" and bool(v.loc["a", "prorrogado"])
+           and v.loc["b", "fim_vigencia"] == "2026-01-01" and not bool(v.loc["b", "prorrogado"])
+           and v.loc["c", "fim_vigencia"] == "2026-06-01" and bool(v.loc["c", "rescindido"]))
+    m = banco.mensalidade(banco.vigencia_efetiva(ct)).set_index("id_pncp")
+    checar("mensalidade: pelo aditivo de prorrogação quando há, senão valor global ÷ meses",
+           m.loc["a", "base_mensalidade"] == "aditivo de prorrogação" and m.loc["a", "mensalidade"] == 5000
+           and m.loc["b", "base_mensalidade"] == "contrato original" and m.loc["b", "mensalidade"] == 10000)
+    curta = banco.mensalidade(banco.vigencia_efetiva(ct.assign(fim_vigencia="2025-02-01", fim_vigencia_aditivo=None,
+                                                                valor_prorrogacao=None)))
+    checar("mensalidade: vigência atípica (1 mês) fica sem estimativa", curta["mensalidade"].isna().all())
+
+    with tempfile.TemporaryDirectory() as tmp:
+        con = banco.conectar(Path(tmp) / "t.db")
+        fim = lambda n: (HOJE + timedelta(days=n)).isoformat()
+        banco.gravar(con, "contratos", pd.DataFrame({
+            "id_pncp": ["83169623000110-2-000001/2025", "83169623000110-2-000002/2025", "83169623000110-2-000003/2020"],
+            "ti": [1, 1, 1], "inicio_vigencia": [fim(-300), fim(-300), "2020-01-01"],
+            "fim_vigencia": [fim(30), fim(-10), "2020-12-31"], "valor_global": [1.0, 1.0, 1.0]}))
+        consultados = []
+
+        def termos_falsos(id_pncp):
+            consultados.append(id_pncp)
+            return {"id_pncp": id_pncp, "fim_vigencia_aditivo": fim(365) if id_pncp.endswith("1/2025") else None,
+                    "valor_aditivos": None, "valor_prorrogacao": 0.0, "termos": 1, "data_rescisao": None}
+        original, pncp.termos_do_contrato = pncp.termos_do_contrato, termos_falsos
+        try:
+            M.aditivos(con)
+            primeira = sorted(consultados)
+            consultados.clear()
+            M.aditivos(con)
+        finally:
+            pncp.termos_do_contrato = original
+        gravado = banco.ler(con, "contratos").set_index("id_pncp")
+        con.close()
+    checar("aditivos: consulta vencendo e vencidos recentes, não o vencido há mais de 3 anos",
+           primeira == ["83169623000110-2-000001/2025", "83169623000110-2-000002/2025"])
+    checar("aditivos: prorrogação gravada e não reconsultada antes do prazo",
+           gravado.loc["83169623000110-2-000001/2025", "fim_vigencia_aditivo"] == fim(365) and not consultados)
+
+    from src import bigquery as bq
+
+    class ClienteFalso:
+        def __init__(self, erro): self.erro = erro
+        def list_rows(self, *a, **k): raise self.erro
+    checar("BigQuery: tabela controle inexistente = primeira publicação",
+           bq._ler_controle(ClienteFalso(bq.NotFound("sem tabela")), "x") is None)
+    try:
+        bq._ler_controle(ClienteFalso(PermissionError("sem permissão")), "x")
+        propagou = False
+    except PermissionError:
+        propagou = True
+    checar("BigQuery: outro erro na leitura do controle não pula a checagem de queda", propagou)
 
 
 if __name__ == "__main__":

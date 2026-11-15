@@ -1,6 +1,5 @@
 """Armazenamento em SQLite com atualização por chave (rodar de novo não duplica)."""
 import sqlite3
-from contextlib import closing
 from datetime import datetime
 
 import pandas as pd
@@ -159,4 +158,4 @@ def definir_controle(con, chave: str, valor: str) -> None:
                     (chave, valor))
 
 
-__all__ = ["conectar", "gravar", "ler", "registrar_execucao", "ultima_coleta", "closing"]
+__all__ = ["conectar", "gravar", "ler", "registrar_execucao", "ultima_coleta"]

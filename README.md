@@ -65,7 +65,11 @@ python main.py tudo --dias 30       # primeira coleta: últimos 30 dias, e expor
 python main.py tudo                 # nas próximas vezes: incremental
 python main.py aditivos             # termos aditivos: vigência prorrogada dos contratos de TI vencidos ou vencendo
 python main.py reclassificar        # depois de ajustar os termos de TI no config
+python main.py publicar             # publica as tabelas do Looker no BigQuery (o `tudo` já faz isso no fim)
 ```
+
+O log de todas as execuções, com os erros, fica em `data/coleta.log` (ao passar de 5 MB vira `coleta.log.1`,
+e são mantidos 5 arquivos antigos). Uma execução interrompida por erro termina com código 1.
 
 Saídas em `saida/`: `oportunidades.csv`, `movimentacoes.csv`, `contratos.csv`,
 `monitor_licitacoes.xlsx` e `dados.js`. O `dados.js` também é copiado para `dashboard/`; abra
@@ -88,6 +92,23 @@ A cada exportação, `saida/looker/` recebe cinco CSVs (UTF-8, vírgula, ponto d
 
 Todas têm a coluna `local` ("Município, SC, Brasil"): no Looker, defina o tipo como **Geográfico → Cidade** para
 o mapa. Defina `codigo_ibge` e os CNPJs como **Texto**.
+
+### Publicação no BigQuery (fonte do Looker Studio)
+
+`python main.py publicar` envia as cinco tabelas de `saida/looker/` para o BigQuery (substituindo as anteriores)
+e grava a tabela `controle`, com a data e as contagens da publicação. Usa o sandbox sem custo do BigQuery
+(as tabelas expiram após 60 dias sem atualização, o que a execução diária evita).
+
+Configuração, uma vez:
+
+1. No Google Cloud, crie um projeto, ative a API do BigQuery e crie o dataset (`BIGQUERY_PROJETO` e
+   `BIGQUERY_DATASET` no `config.py`).
+2. Crie uma conta de serviço com os papéis **BigQuery Data Editor** e **BigQuery Job User** e baixe a chave JSON.
+3. Salve a chave em `credenciais/bigquery-key.json` (a pasta está no `.gitignore`), ou aponte a variável
+   `GOOGLE_APPLICATION_CREDENTIALS` para ela.
+
+Proteção: se alguma tabela tiver mais de 20% menos linhas que na publicação anterior
+(`BIGQUERY_QUEDA_MAXIMA`), a publicação é cancelada, para que uma coleta incompleta não esvazie o painel.
 
 ### Execução diária no Windows
 

@@ -24,9 +24,11 @@ import pandas as pd
 import config as C
 
 try:
+    from google.api_core.exceptions import NotFound
     from google.cloud import bigquery
 except ImportError:   # ausente até `pip install -r requirements.txt`
     bigquery = None
+    NotFound = LookupError   # nunca levantada; só para o `except` abaixo continuar válido
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +54,6 @@ def _esquemas() -> dict[str, list]:
             _s("plataforma", "STRING"), _s("local", "STRING"),
             _s("dias_ate_disputa", "INTEGER"), _s("faixa_prazo", "STRING"),
             _s("data_atualizacao", "DATE"),
-            
         ],
         "movimentacoes": [
             _s("data", "DATE"), _s("tipo", "STRING"), _s("codigo_ibge", "STRING"),
@@ -150,8 +151,9 @@ def _ler_controle(client, tabela: str) -> dict | None:
     """Última publicação (uma linha). None se a tabela ainda não existe (primeira publicação)."""
     try:
         rows = list(client.list_rows(tabela, max_results=1))
-    except Exception:
+    except NotFound:
         return None
+    # outros erros (rede, permissão) sobem: tratá-los como "primeira publicação" pularia a checagem de queda
     if not rows:
         return None
     return {k: v for k, v in rows[0].items() if k != "publicado_em"}
