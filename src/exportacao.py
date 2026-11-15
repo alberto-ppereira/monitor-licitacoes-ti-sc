@@ -33,10 +33,12 @@ def oportunidades(contratacoes: pd.DataFrame, populacao: pd.DataFrame, hoje: dat
     df["nota"] = pontuar(df, populacao, hoje)
     # a mesma licitação às vezes é publicada duas vezes (sistema do órgão e portal de compras), com ids
     # diferentes: mesmo município, mesma data de disputa e mesmo valor (arredondado) contam como uma só
+    # Preenche o link vazio com a URL padrão do edital no PNCP
+    from src.pncp import link_edital_pncp
+    df["link"] = df["link"].fillna("").replace("", pd.NA).fillna(df["id_pncp"].map(link_edital_pncp))
     df = df.sort_values("nota", ascending=False)
     chave = df[["municipio", "data_abertura"]].assign(v=df["valor_estimado"].round(0))
-    df = df[~chave.duplicated()]
-    
+    df = df[~chave.duplicated()]    
     df["data_atualizacao"] = hoje.isoformat()
     
     return df[COLS_OPORTUNIDADES].reset_index(drop=True)

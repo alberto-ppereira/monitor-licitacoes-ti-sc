@@ -82,6 +82,7 @@ def _esquemas() -> dict[str, list]:
             _s("contratos_total", "INTEGER"), _s("oportunidades_abertas", "INTEGER"),
             _s("valor_oportunidades", "FLOAT"), _s("plataforma_principal", "STRING"),
             _s("situacao_ti", "STRING"), _s("local", "STRING"),
+            _s("mensalidade_erp", "FLOAT"),
             _s("data_atualizacao", "DATE"),
         ],
         "fornecedores": [

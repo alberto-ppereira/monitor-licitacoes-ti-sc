@@ -84,9 +84,18 @@ def municipios(mun: pd.DataFrame, ct: pd.DataFrame, op: pd.DataFrame, contrataco
             "contratos_de_consorcio": g["tipo_orgao"].apply(lambda s: int((s == "Consórcio").sum())),
         }).reset_index()
         base = base.merge(agg, on="codigo_ibge", how="left")
+
+        # --- NOVO BLOCO: Mensalidade apenas de ERP (Gestão integrada) ---
+        vig_erp = vig[vig["categoria"] == "Gestão integrada"]
+        if not vig_erp.empty:
+            erp_agg = vig_erp.groupby("codigo_ibge")["mensalidade"].sum(min_count=1).rename("mensalidade_erp").reset_index()
+            base = base.merge(erp_agg, on="codigo_ibge", how="left")
+        else:
+            base["mensalidade_erp"] = 0.0
+        # ----------------------------------------------------------------
     else:
         base = base.assign(contratos_vigentes=0, valor_vigente=0.0, fornecedores_vigentes=0, proximo_vencimento=None,
-                           fornecedor_principal=None, contratos_de_consorcio=0)
+                           fornecedor_principal=None, contratos_de_consorcio=0, mensalidade_erp=0.0)
     if not ct.empty:
         base = base.merge(ct.groupby("codigo_ibge").size().rename("contratos_total").reset_index(), on="codigo_ibge", how="left")
     if not op.empty:
@@ -99,7 +108,7 @@ def municipios(mun: pd.DataFrame, ct: pd.DataFrame, op: pd.DataFrame, contrataco
     for col in ["contratos_vigentes", "fornecedores_vigentes", "contratos_de_consorcio", "contratos_total", "oportunidades_abertas"]:
         if col in base:
             base[col] = base[col].fillna(0).astype(int)
-    for col in ["valor_vigente", "valor_oportunidades", "mensalidade_vigente"]:
+    for col in ["valor_vigente", "valor_oportunidades", "mensalidade_vigente", "mensalidade_erp"]:
         if col in base:
             base[col] = base[col].fillna(0.0)
     base["situacao_ti"] = base["contratos_vigentes"].gt(0).map({True: "Com contrato de TI vigente",
