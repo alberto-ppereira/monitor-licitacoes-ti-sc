@@ -319,11 +319,7 @@ def exportar(con, demo: bool = False) -> None:
         "movimentacoes": exportacao.movimentacoes(contratacoes, contratos, hoje),
         "contratos": exportacao.contratos_ti(contratos, hoje),
     }
-    
-    # Injeta a data de atualização em todas as tabelas (HTML e CSVs)
-    for df in tabelas.values():
-        if not df.empty:
-            df["data_atualizacao"] = hoje.isoformat()
+ 
             
     exportacao.exportar(tabelas, C.SAIDA, hoje, demo)
     log.info("Exportado em %s: %s", C.SAIDA, {k: len(v) for k, v in tabelas.items()})

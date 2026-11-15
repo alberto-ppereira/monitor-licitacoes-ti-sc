@@ -117,10 +117,10 @@ def link_contrato(id_pncp) -> str:
 
 def link_edital_pncp(id_pncp) -> str:
     """Gera a URL do edital no portal do PNCP a partir do id_pncp (ex: '12345678000199-1-000123/2026')."""
-    partes = _partes_contrato(id_pncp)
-    if not partes:
+    m = re.match(r"(\d{14})-1-(\d+)/(\d{4})", str(id_pncp or ""))
+    if not m:
         return ""
-    cnpj, ano, seq = partes
+    cnpj, seq, ano = m[1], int(m[2]), m[3]
     return f"https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
 
 def _tabela(linhas: list[dict], colunas: list[str]) -> pd.DataFrame:
