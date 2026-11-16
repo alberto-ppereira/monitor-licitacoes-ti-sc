@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 import config as C
-from src.pncp import link_contrato
+from src.pncp import link_contrato, link_edital_pncp
 from src.tratamento import dias_ate, pontuar, situacao_encerrada, tipo_orgao
 
 COLS_OPORTUNIDADES = ["codigo_ibge", "municipio", "orgao", "tipo_orgao", "objeto", "categoria", "modalidade",
@@ -34,7 +34,6 @@ def oportunidades(contratacoes: pd.DataFrame, populacao: pd.DataFrame, hoje: dat
     # a mesma licitação às vezes é publicada duas vezes (sistema do órgão e portal de compras), com ids
     # diferentes: mesmo município, mesma data de disputa e mesmo valor (arredondado) contam como uma só
     # Preenche o link vazio com a URL padrão do edital no PNCP
-    from src.pncp import link_edital_pncp
     df["link"] = df["link"].fillna("").replace("", pd.NA).fillna(df["id_pncp"].map(link_edital_pncp))
     df = df.sort_values("nota", ascending=False)
     chave = df[["municipio", "data_abertura"]].assign(v=df["valor_estimado"].round(0))
@@ -53,8 +52,10 @@ def movimentacoes(contratacoes: pd.DataFrame, contratos: pd.DataFrame, hoje: dat
         c = contratacoes[contratacoes["data_publicacao"].between(ini, hoje.isoformat())]
         partes.append(pd.DataFrame({
             "data": c["data_publicacao"], "tipo": "Licitação publicada", "codigo_ibge": c["codigo_ibge"],
-            "municipio": c["municipio"], "descricao": c["objeto"], "fornecedor": "",
-            "valor": c["valor_estimado"], "link": c["link"]}))
+            "municipio": c["municipio"], "descricao": c["objeto"], "fornecedor": "Em licitação",
+            # sem link do sistema de origem: usa a página do edital no PNCP
+            "valor": c["valor_estimado"],
+            "link": c["link"].fillna("").replace("", pd.NA).fillna(c["id_pncp"].map(link_edital_pncp))}))
     if not contratos.empty:
         data = contratos["data_assinatura"].fillna(contratos["data_publicacao"])
         k = contratos[data.between(ini, hoje.isoformat())]
@@ -62,13 +63,10 @@ def movimentacoes(contratacoes: pd.DataFrame, contratos: pd.DataFrame, hoje: dat
             "data": data[k.index], "tipo": "Contrato assinado", "codigo_ibge": k["codigo_ibge"],
             "municipio": k["municipio"], "descricao": k["objeto"], "fornecedor": k["fornecedor"],
             "valor": k["valor_global"], "link": k["id_pncp"].map(link_contrato)}))
-            
     if not partes:
         return pd.DataFrame(columns=COLS_MOVIMENTACOES)
-        
     out = pd.concat(partes, ignore_index=True).sort_values("data", ascending=False)
     out["data_atualizacao"] = hoje.isoformat()
-    
     return out[COLS_MOVIMENTACOES]
 
 
@@ -94,7 +92,6 @@ def contratos_ti(contratos: pd.DataFrame, hoje: date) -> pd.DataFrame:
         .assign(link=contratos["id_pncp"].map(link_contrato), tipo_orgao=contratos["orgao"].map(tipo_orgao))
         
     out["data_atualizacao"] = hoje.isoformat()
-    
     return out[COLS_CONTRATOS].sort_values(["municipio", "fim_vigencia"]).reset_index(drop=True)
 
 
