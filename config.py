@@ -1,4 +1,4 @@
-"""Configuração do monitor. Nenhum número ou texto de regra de negócio fica fora deste arquivo."""
+﻿"""Configuração do monitor. Nenhum número ou texto de regra de negócio fica fora deste arquivo."""
 from pathlib import Path
 
 RAIZ = Path(__file__).parent
@@ -108,11 +108,12 @@ TERMOS_TI_FORTES = [
 CATEGORIAS_PROCESSO_TI = ["informatica"]
 # Termos que derrubam o registro mesmo com termo de TI (falsos positivos comuns)
 # Frases específicas: "mobiliario" sozinho derrubava "cadastro mobiliário" (cadastro de ISS, comum em ERP)
-TERMOS_EXCLUIR = ["impressora", "toner", "material de expediente", "aquisicao de mobiliario", "aquisicao de moveis",
+TERMOS_EXCLUIR = ["impressora", "iso 9001", "gestao da qualidade", "instituicao financeira", "analises clinicas", "sigtap", "toner", "material de expediente", "aquisicao de mobiliario", "aquisicao de moveis",
                   "aquisicao de veiculo", "locacao de veiculo",
                   # falsos positivos vistos na primeira coleta real: equipamentos, obras e serviços com "software" incluso
                   "rastreamento", "telemetria", "videomonitoramento", "seguranca eletronica", "controle de acesso",
                   "datalogger", "sonorizacao", "geracao distribuida", "energia eletrica", "energias renovaveis",
+                  "iso 9001", "gestao da qualidade", "instituicao financeira", "analises clinicas", "sigtap",
                   "processo seletivo", "concurso publico", "servicos de reforma", "componentes de hardware",
                   "digitalizacao", "medicina e seguranca do trabalho", "seguranca do trabalho"]
 
