@@ -1,7 +1,8 @@
-# Monitor de licitações de TI em prefeituras de SC
+# Monitor de licitações de TI em municípios de SC
 
 Coleta, integra e exporta dados públicos para mapear oportunidades de venda de sistemas de gestão
-para prefeituras de Santa Catarina: licitações publicadas e em aberto, contratos vigentes e seus
+para os municípios de Santa Catarina (prefeituras, câmaras, fundos, autarquias, fundações e
+consórcios): licitações publicadas e em aberto, contratos vigentes e seus
 fornecedores, com uma nota de prioridade por oportunidade. Inclui um script separado que mostra onde
 um fornecedor de software tem contratos no estado.
 
