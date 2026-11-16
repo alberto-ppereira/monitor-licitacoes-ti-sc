@@ -108,12 +108,14 @@ TERMOS_TI_FORTES = [
 CATEGORIAS_PROCESSO_TI = ["informatica"]
 # Termos que derrubam o registro mesmo com termo de TI (falsos positivos comuns)
 # Frases específicas: "mobiliario" sozinho derrubava "cadastro mobiliário" (cadastro de ISS, comum em ERP)
-TERMOS_EXCLUIR = ["impressora", "iso 9001", "gestao da qualidade", "instituicao financeira", "analises clinicas", "sigtap", "toner", "material de expediente", "aquisicao de mobiliario", "aquisicao de moveis",
+TERMOS_EXCLUIR = ["impressora", "toner", "material de expediente", "aquisicao de mobiliario", "aquisicao de moveis",
                   "aquisicao de veiculo", "locacao de veiculo",
                   # falsos positivos vistos na primeira coleta real: equipamentos, obras e serviços com "software" incluso
                   "rastreamento", "telemetria", "videomonitoramento", "seguranca eletronica", "controle de acesso",
                   "datalogger", "sonorizacao", "geracao distribuida", "energia eletrica", "energias renovaveis",
+                  # falsos positivos vistos no painel (nov/2026): o objeto cita "sistema", mas não é software de gestão
                   "iso 9001", "gestao da qualidade", "instituicao financeira", "analises clinicas", "sigtap",
+                  "alarme", "cftv", "radiocomunicacao", "educacao ambiental", "materiais didaticos",
                   "processo seletivo", "concurso publico", "servicos de reforma", "componentes de hardware",
                   "digitalizacao", "medicina e seguranca do trabalho", "seguranca do trabalho"]
 
